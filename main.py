@@ -3,7 +3,6 @@ import ollama
 from streamlit_modal import Modal
 import pandas as pd
 
-
 account_file = pd.read_csv("Paid_Users.csv")
 account_file["Account"] = account_file["Account"].astype(str).str.strip()
 account_file["Password"] = account_file["Password"].astype(str).str.strip()
@@ -99,7 +98,8 @@ def paid_user():
     text_to_AI = Instruction + prompt
     if st.button("Submit") and prompt:
         response = ollama.chat(model="gemma3", messages=[{"role": "user", "content": text_to_AI}])
-        token_used(username, prompt, response)
+        response = response['message']['content']
+        token_used(username, prompt, response.__str()__)
         
         
 
