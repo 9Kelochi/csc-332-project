@@ -3,7 +3,7 @@ import ollama
 from streamlit_modal import Modal
 import pandas as pd
 
-# Load and clean account data
+
 account_file = pd.read_csv("Paid_Users.csv")
 account_file["Account"] = account_file["Account"].astype(str).str.strip()
 account_file["Password"] = account_file["Password"].astype(str).str.strip()
