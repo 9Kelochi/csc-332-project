@@ -48,12 +48,18 @@ def register():
     password = st.text_input("Password", type="password")
 
     if st.button("Register"):
-        conn = sqlite3.connect("registering_users.db")
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-        conn.commit()
-        conn.close()
-        st.success("Registration successful! Now wait for approval.")
+        if username and password:
+            try:
+                conn = sqlite3.connect("registering_users.db")
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO registering_users (username, password) VALUES (?, ?)", (username, password))
+                conn.commit()
+                conn.close()
+                st.success("Registration successful! Now wait for approval.")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+        else:
+            st.error("Please fill in all fields.")
 # Token modification function
 def token_add_minus(username, token):
     conn = sqlite3.connect("users.db")
