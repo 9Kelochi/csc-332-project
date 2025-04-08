@@ -6,43 +6,39 @@ from datetime import datetime, timedelta
 import time
 import random
 import string
-# Initialize session state
-if "paid_users" not in st.session_state:
-    st.session_state["paid_users"] = False
-if "username" not in st.session_state:
-    st.session_state["username"] = None
-if "tokens" not in st.session_state:
-    st.session_state["tokens"] = 0
-if "pay_clicked" not in st.session_state:
-    st.session_state["pay_clicked"] = False
-if "confirm_clicked" not in st.session_state:
-    st.session_state["confirm_clicked"] = False
-if "register" not in st.session_state:
-    st.session_state["register"] = False
-if "login" not in st.session_state:
-    st.session_state["login"] = False
-if "lockout_until" not in st.session_state:
-    st.session_state.lockout_until = None
-if "free_user" not in st.session_state:
-    st.session_state["free_user"] = True
-if "super_users" not in st.session_state:
-    st.session_state["super_users"] = False
-if "checks_approval" not in st.session_state:
-    st.session_state["checks_approval"] = False
-if "Done_approving" not in st.session_state:
-    st.session_state["Done_approving"] = False
+
+# --------------------- Session State Initialization --------------------- #
+
+def init_session_state():
+    defaults = {
+        "paid_users": False,
+        "username": None,
+        "tokens": 0,
+        "pay_clicked": False,
+        "confirm_clicked": False,
+        "register": False,
+        "login": False,
+        "lockout_until": None,
+        "free_user": True,
+        "super_users": False,
+        "checks_approval": False,
+        "Done_approving": False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+init_session_state()
+
+# --------------------- Utility Functions --------------------- #
+
 def same_username(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("SELECT username FROM users")
-    result = cursor.fetchall()
+    result = [row[0] for row in cursor.fetchall()]
     conn.close()
-    result = [row[0] for row in result]
-    if username in result:
-        return False
-    else:
-        return True
-    
+    return username not in result
 
 def trigger_lockout(now):
     st.session_state.lockout_until = now + timedelta(minutes=3)
@@ -57,22 +53,38 @@ def registry_approval(username):
     cursor.execute("SELECT * FROM registering_users WHERE username = ?", (username,))
     result = cursor.fetchone()
     conn.close()
-    
+
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("INSERT INTO users (username, password, last_logout_time, tokens) VALUES (?, ?, ?, ?)", (username, result[1], None, 0))
     conn.commit()
     conn.close()
+
+def token_add_minus(username, token):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET tokens = tokens + ? WHERE username = ?", (token, username))
+    conn.commit()
+    conn.close()
+
+def delete_registery(ID):
+    conn = sqlite3.connect("registering_users.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM registering_users WHERE register_id = ?", (ID,))
+    conn.commit()
+    conn.close()
+
+# --------------------- User Interfaces --------------------- #
+
 def register():
     st.title("Register Page")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
-    now = datetime.now()
-    now = now.strftime("%Y-%m-%d %H:%M:%S")
-    register_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    register_id = generate_random_id()
+
     if st.button("Register"):
-        match = same_username(username)
-        if not match:
+        if not same_username(username):
             st.error("Username already exists.")
         elif username and password:
             try:
@@ -87,10 +99,37 @@ def register():
         else:
             st.error("Please fill in all fields.")
 
+def login():
+    st.title("Login Page")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login", key="Login button"):
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ?", (username, password))
+        result = cursor.fetchone()
+        conn.close()
+
+        conn = sqlite3.connect("super_users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
+        super_result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            st.session_state.update({"username": username, "tokens": result[0], "paid_users": True})
+            st.success(f"Login successful! You have {result[0]} tokens.")
+            st.rerun()
+        elif super_result:
+            st.session_state.update({"username": username, "password": password, "super_users": True})
+            st.rerun()
+        else:
+            st.error("Invalid username or password")
+
 def super_user():
     st.title("Super User Page")
     username = st.session_state["username"]
-    password = st.session_state["password"]
     st.sidebar.write(f"Welcome, {username}!")
 
     conn = sqlite3.connect("registering_users.db")
@@ -98,10 +137,10 @@ def super_user():
     cursor.execute("SELECT * FROM registering_users WHERE register_status = 'Waiting for approval'")
     results = cursor.fetchall()
     conn.close()
-    
+
     if results:
         st.subheader("Users Awaiting Approval")
-        for idx, row in enumerate(results):
+        for row in results:
             register_id = row[2]
             with st.expander(f"User: {row[0]} | ID: {register_id} | Status: {row[4]}"):
                 col1, col2 = st.columns(2)
@@ -112,7 +151,6 @@ def super_user():
                         cursor.execute("UPDATE registering_users SET register_status = 'Approved' WHERE register_id = ?", (register_id,))
                         conn.commit()
                         conn.close()
-
                         registry_approval(row[0])
                         st.success(f"{row[0]} has been approved.")
                         st.rerun()
@@ -128,56 +166,7 @@ def super_user():
     else:
         st.info("No users waiting for approval.")
 
-# Token modification function
-def token_add_minus(username, token):
-    conn = sqlite3.connect("users.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE users 
-        SET tokens = tokens + ?
-        WHERE username = ?
-    ''', (token, username))
-    conn.commit()
-    conn.close()
-
-
-# Login function
-def login():
-    st.title("Login Page")
-    
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login", key="Login button"):
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ?", (username, password))
-        result = cursor.fetchone()
-        conn.close()
-        
-        conn = sqlite3.connect("super_users.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
-        super_result = cursor.fetchone()
-        conn.close()
-        if result:
-            user_tokens = result[0]
-            st.session_state["username"] = username
-            st.session_state["tokens"] = user_tokens
-            st.success(f"Login successful! You have {user_tokens} tokens.")
-            st.session_state["paid_users"] = True
-            st.rerun()
-        elif super_result:
-            st.session_state["username"] = username
-            st.session_state["password"] = password
-            st.session_state["super_users"] = True
-            st.rerun()
-
-        else:
-            st.error("Invalid username or password")
-
-
-# Token purchase modal
+# The rest (homepage, token_purchase_modal, free_user, paid_user) continues below...
 def token_purchase_modal(username):
     modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
     if st.button("Tokens"):
@@ -247,13 +236,6 @@ def paid_user():
 
     token_purchase_modal(username)
 
-def delete_registery(ID):
-    conn = sqlite3.connect("registering_users.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM registering_users WHERE register_id = ?", (ID,))
-    conn.commit()
-    conn.close()
-
 def free_user():
     if not st.session_state["checks_approval"]:
         homepage(None)
@@ -292,9 +274,10 @@ else:
         register()
     else:
         free_user()
-        if st.button("Login"):
-            st.session_state["login"] = True
-            st.rerun()
-        if st.button("Register"):
-            st.session_state["register"] = True
-            st.rerun()
+        if st.session_state["checks_approval"] == False:
+            if st.button("Login"):
+                st.session_state["login"] = True
+                st.rerun()
+            if st.button("Register"):
+                st.session_state["register"] = True
+                st.rerun()
