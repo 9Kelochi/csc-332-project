@@ -6,11 +6,12 @@ from datetime import datetime, timedelta
 import time
 import random
 import string
-
+import difflib
 # --------------------- Session State Initialization --------------------- #
 
 def init_session_state():
     defaults = {
+        "self_edit": False,
         "paid_users": False,
         "username": None,
         "tokens": 0,
@@ -64,9 +65,12 @@ def token_add_minus(username, token):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("UPDATE users SET tokens = tokens + ? WHERE username = ?", (token, username))
+    cursor.execute("SELECT tokens FROM users WHERE username = ?", (username,))
+    updated_tokens = cursor.fetchone()[0]
     conn.commit()
     conn.close()
-
+    st.session_state["tokens"] = updated_tokens
+    st.rerun()
 def delete_registery(ID):
     conn = sqlite3.connect("registering_users.db")
     cursor = conn.cursor()
@@ -74,6 +78,23 @@ def delete_registery(ID):
     conn.commit()
     conn.close()
 
+def word_difference(original, edited, username):
+    original_words = original.split()
+    edited_words = edited.split()
+    matcher = difflib.SequenceMatcher(None, original_words, edited_words)
+    difference = 0.0
+    result = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            result.extend(edited_words[j1:j2])
+        elif tag in ('replace', 'insert'):
+            difference += max(i2 - i1, j2 - j1)
+            for word in edited_words[j1:j2]:
+                result.append(f'<mark>{word}</mark>')
+                #st.markdown(word, unsafe_allow_html=True)
+    if username:
+        token_add_minus(username, -5 * difference)
+    return ' '.join(result), -5*difference
 # --------------------- User Interfaces --------------------- #
 
 def register():
@@ -176,7 +197,7 @@ def token_purchase_modal(username):
     if modal.is_open():
         with modal.container():
             st.markdown("<h1 style='color: green;'>100 Tokens = $1.00</h1>", unsafe_allow_html=True)
-            amount_t = st.text_input("Pay: ", value="0")
+            amount_t = st.text_input("Pay: ", value="0", key="pay_amount")
 
             try:
                 tokens_purchased = float(amount_t)
@@ -189,14 +210,7 @@ def token_purchase_modal(username):
             if st.button("Confirm"):
                 if tokens_purchased > 0:
                     token_add_minus(username, tokens_purchased)
-                    conn = sqlite3.connect("users.db")
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT tokens FROM users WHERE username = ?", (username,))
-                    updated_tokens = cursor.fetchone()[0]
-                    conn.close()
-                    st.session_state["tokens"] = updated_tokens
                     st.success(f"Purchased {int(tokens_purchased)} tokens!")
-                    st.rerun()
                 else:
                     st.error("Please enter a valid amount.")
 
@@ -211,7 +225,6 @@ def homepage(username):
             timer_placeholder.warning(f"⏳ You're temporarily locked out. Please wait {mins:02d}:{secs:02d} (mm:ss)")
             time.sleep(1)
         st.rerun()
-        return
     Instruction = "Please edit the text if it has any grammar error, you don't need to return anything else other than the text itself."
     prompt = st.text_input("Enter text to correct:")
     upload_file = st.file_uploader("Upload a file", type="txt")
@@ -224,9 +237,16 @@ def homepage(username):
             st.error("Text length exceeds limit for free users.")
             trigger_lockout(now)
             return
-        response = ollama.chat(model="gemma3", messages=[{"role": "user", "content": text_to_AI}])
-        response = response['message']['content']
-        token_used(username, prompt, response)
+        response = ollama.generate(model="mistral", prompt=text_to_AI)
+        response = response.get("response", "[No 'response' field found]")
+        new_response, token_deducted = word_difference(prompt, response, username)
+        st.session_state["corrected_text"] = new_response
+        
+    if "corrected_text" in st.session_state:
+        st.markdown("**LLM Output:**", unsafe_allow_html=True)
+        st.markdown(st.session_state["corrected_text"], unsafe_allow_html=True)
+    
+            
 # Paid user interface
 def paid_user():
     username = st.session_state["username"]
