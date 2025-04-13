@@ -99,8 +99,8 @@ def word_difference(original, edited, username):
 
 def register():
     st.title("Register Page")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.text_input("Username", max_chars = 50)
+    password = st.text_input("Password", type="password", max_chars = 50)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     register_id = generate_random_id()
 
