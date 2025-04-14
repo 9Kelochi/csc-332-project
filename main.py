@@ -7,6 +7,27 @@ import time
 import random
 import string
 import difflib
+
+#Button to open the home page in a new browser tab
+def go_home_button():
+    # Use a special key to mark when the button was clicked
+    if "go_home_clicked" not in st.session_state:
+        st.session_state["go_home_clicked"] = False
+
+    if st.session_state["go_home_clicked"]:
+        # Reset states only on rerun pass-through
+        st.session_state["login"] = False
+        st.session_state["register"] = False
+        st.session_state["checks_approval"] = False
+        st.session_state["pay_clicked"] = False
+        st.session_state["confirm_clicked"] = False
+        st.session_state["go_home_clicked"] = False  # Reset flag
+        st.rerun()
+
+    if st.button("🏠 Go to Home Page"):
+        st.session_state["go_home_clicked"] = True
+        st.rerun()
+        
 # --------------------- Session State Initialization --------------------- #
 
 def init_session_state():
@@ -98,6 +119,7 @@ def word_difference(original, edited, username):
 # --------------------- User Interfaces --------------------- #
 
 def register():
+    go_home_button()
     st.title("Register Page")
     username = st.text_input("Username", max_chars = 50)
     password = st.text_input("Password", type="password", max_chars = 50)
@@ -121,6 +143,7 @@ def register():
             st.error("Please fill in all fields.")
 
 def login():
+    go_home_button()
     st.title("Login Page")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -149,6 +172,7 @@ def login():
             st.error("Invalid username or password")
 
 def super_user():
+    go_home_button()
     st.title("Super User Page")
     username = st.session_state["username"]
     st.sidebar.write(f"Welcome, {username}!")
@@ -189,6 +213,7 @@ def super_user():
 
 # The rest (homepage, token_purchase_modal, free_user, paid_user) continues below...
 def token_purchase_modal(username):
+    go_home_button()
     modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
     if st.button("Tokens"):
         st.session_state["pay_clicked"] = True
@@ -215,6 +240,7 @@ def token_purchase_modal(username):
                     st.error("Please enter a valid amount.")
 
 def homepage(username):
+    go_home_button()
     st.title("Grammarly")
     now = datetime.now()
     if st.session_state.lockout_until and now < st.session_state.lockout_until:
@@ -249,6 +275,7 @@ def homepage(username):
             
 # Paid user interface
 def paid_user():
+    go_home_button()
     username = st.session_state["username"]
     tokens = st.session_state["tokens"]
     st.sidebar.write(f"Token Balance: {tokens}")
@@ -263,7 +290,7 @@ def free_user():
             st.session_state["checks_approval"] = True
             st.rerun()
     elif st.session_state["checks_approval"]:
-    
+        go_home_button()
         ID = st.text_input("Enter your ID to check approval:")
         if st.button("Check Approval"):
             conn = sqlite3.connect("registering_users.db")
