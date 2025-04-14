@@ -9,7 +9,10 @@ def create_db():
             username TEXT PRIMARY KEY,
             password TEXT NOT NULL,
             last_logout_time INTEGER NOT NULL, 
-            tokens INTEGER NOT NULL
+            tokens INTEGER NOT NULL,
+            accountApproved INTEGER NOT NULL,
+            userType TEXT NOT NULL,
+            numCorrections TEXT NOT NULL
         )
     ''')
 
@@ -18,14 +21,14 @@ def create_db():
 
 # create_db()
 
-def insert_user(username, password, last_logout_time, tokens):
+def insert_user(username, password, last_logout_time, tokens, accountApproved, userType, numCorrections):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
 
     cursor.execute('''
-        INSERT INTO users (username, password, last_logout_time, tokens)
-        VALUES (?, ?, ?, ?)
-    ''', (username, password, last_logout_time, tokens))
+        INSERT INTO users (username, password, last_logout_time, tokens, accountApproved, userType, numCorrections)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (username, password, last_logout_time, tokens, accountApproved, userType, numCorrections))
 
     conn.commit()
     conn.close()
@@ -34,10 +37,10 @@ def insert_user(username, password, last_logout_time, tokens):
     
 # Kel,3917,1712347200,120.0
 # fen,2917,1712347200,123.0
-# Lun,3344,1712347200,72.0
-
-insert_user("Kel",3917,1712347200,120.0)
-insert_user("fen",2917,1712347200,123.0)
-insert_user("Lun",2917,1712347200,123.0)
+# Lun,3344,17123
+create_db()
+insert_user("Kel",3917,1712347200,120.0, True, "Paid", 50)
+insert_user("fen",2917,1712347200,123.0, True, "Paid", 17)
+insert_user("Lun",2917,1712347200,123.0, True, "Paid", 1)
 
 
