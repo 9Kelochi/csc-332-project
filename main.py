@@ -9,6 +9,7 @@ import string
 import difflib
 
 #Button to open the home page in a new browser tab
+
 def go_home_button(key_suffix=""):
     # Use a special key to mark when the button was clicked
     if "go_home_clicked" not in st.session_state:
@@ -31,6 +32,53 @@ def go_home_button(key_suffix=""):
         st.rerun()
         
 # --------------------- Session State Initialization --------------------- #
+def navbar():
+    st.markdown("---")
+    
+    if st.session_state.get("paid_users"):
+        # Paid User Navbar
+        cols = st.columns(5)
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_paid"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("💰 Tokens", key="nav_tokens_paid"):
+                st.session_state["page"] = "tokens"
+                st.rerun()
+        with cols[2]:
+            if st.button("🤝 Collab", key="nav_collab_paid"):
+                st.session_state["page"] = "collab"
+                st.rerun()
+        with cols[3]:
+            if st.button("📂 Files Saved", key="nav_files_paid"):
+                st.session_state["page"] = "files_saved"
+        with cols[4]:
+            if st.button("🚪 Logout", key="nav_logout_paid"):
+                st.session_state["logout"] = True
+
+    else:
+        # Free User Navbar
+        cols = st.columns(4)
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_free"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("🔑 Login", key="nav_login_free"):
+                st.session_state["page"] = "login"
+                st.rerun()
+        with cols[2]:
+            if st.button("📝 Register", key="nav_register_free"):
+                st.session_state["page"] = "register"
+                st.rerun()
+        with cols[3]:
+            if st.button("🔎 Check Registration", key="nav_check_free"):
+                st.session_state["page"] = "check_register"
+                st.rerun()
+
+    st.markdown("---")
+
 
 def init_session_state():
     defaults = {
@@ -47,6 +95,7 @@ def init_session_state():
         "super_users": False,
         "checks_approval": False,
         "Done_approving": False,
+        "page": None
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -72,15 +121,13 @@ def generate_random_id():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
 def registry_approval(username):
-    conn = sqlite3.connect("registering_users.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM registering_users WHERE username = ?", (username,))
-    result = cursor.fetchone()
-    conn.close()
-
+    approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO users (username, password, last_logout_time, tokens) VALUES (?, ?, ?, ?)", (username, result[1], None, 0))
+    cursor.execute(
+        "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ? WHERE username = ?",
+        (1, approved_Date, 0, username)
+    )
     conn.commit()
     conn.close()
 
@@ -94,10 +141,11 @@ def token_add_minus(username, token):
     conn.close()
     st.session_state["tokens"] = updated_tokens
     st.rerun()
+
 def delete_registery(ID):
-    conn = sqlite3.connect("registering_users.db")
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM registering_users WHERE register_id = ?", (ID,))
+    cursor.execute("DELETE FROM users WHERE ID = ?", (ID,))
     conn.commit()
     conn.close()
 
@@ -118,10 +166,16 @@ def word_difference(original, edited, username):
     if username:
         token_add_minus(username, -5 * difference)
     return ' '.join(result), -5*difference
+
+def add_logout(username):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET last_logout_time = ? WHERE username = ?", (datetime.now(), username))
+    conn.commit()
+    conn.close()
 # --------------------- User Interfaces --------------------- #
 
 def register():
-    go_home_button("register")
     st.title("Register Page")
     username = st.text_input("Username", max_chars = 50)
     password = st.text_input("Password", type="password", max_chars = 50)
@@ -133,9 +187,9 @@ def register():
             st.error("Username already exists.")
         elif username and password:
             try:
-                conn = sqlite3.connect("registering_users.db")
+                conn = sqlite3.connect("users.db")
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO registering_users (username, password, register_id, register_date, register_status) VALUES (?, ?, ?, ?, ?)", (username, password, register_id, now, "Waiting for approval"))
+                cursor.execute("INSERT INTO username (username, password, ID, register_date, account_approval) VALUES (?, ?, ?, ?, ?)", (username, password, register_id, now, 0))
                 conn.commit()
                 conn.close()
                 st.success(f"Registration successful! Your ID is '{register_id}', which can be used to check your approval. Now wait for approval.")
@@ -215,9 +269,8 @@ def super_user():
 
 # The rest (homepage, token_purchase_modal, free_user, paid_user) continues below...
 def token_purchase_modal(username):
-    go_home_button("token_model")
     modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
-    if st.button("Tokens"):
+    if st.session_state.get("page") == "tokens":
         st.session_state["pay_clicked"] = True
         modal.open()
 
@@ -242,7 +295,6 @@ def token_purchase_modal(username):
                     st.error("Please enter a valid amount.")
 
 def homepage(username):
-    go_home_button("homepage")
     st.title("The Token Terminator")
     now = datetime.now()
     if st.session_state.lockout_until and now < st.session_state.lockout_until:
@@ -277,18 +329,23 @@ def homepage(username):
             
 # Paid user interface
 def paid_user():
-    go_home_button("paid_user")
     username = st.session_state["username"]
     tokens = st.session_state["tokens"]
     st.sidebar.write(f"Token Balance: {tokens}")
     homepage(username)
-
     token_purchase_modal(username)
+    if st.session_state.get("logout") == True:
+        add_logout(username)
+        st.session_state["paid_users"] = False
+        st.session_state["username"] = None
+        st.session_state["tokens"] = 0
+        st.session_state["logout"] = False
 
+        st.rerun()
 def free_user():
-    if not st.session_state["checks_approval"]:
+    if not st.session_state["page"] == "check_register":
         homepage(None)
-        if st.button("Account Approval Check", key="check_approval"):
+        if st.session_state["page"] == "check_register":
             st.session_state["checks_approval"] = True
             st.rerun()
     elif st.session_state["checks_approval"]:
@@ -312,21 +369,18 @@ def free_user():
 
 
 # Main execution
+navbar()
+
 if st.session_state["paid_users"]:
     paid_user()
 elif st.session_state["super_users"]:
     super_user()
 else:
-    if st.session_state["login"]:
+    if st.session_state["page"] == "login":
         login()
-    elif st.session_state["register"]:
+    elif st.session_state["page"] == "register":
         register()
     else:
         free_user()
-        if st.session_state["checks_approval"] == False:
-            if st.button("Login"):
-                st.session_state["login"] = True
-                st.rerun()
-            if st.button("Register"):
-                st.session_state["register"] = True
-                st.rerun()
+        if st.session_state["page"] == "check_register":
+            checks_approval()
