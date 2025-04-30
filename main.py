@@ -88,7 +88,8 @@ def init_session_state():
         "checks_approval": False,
         "Done_approving": False,
         "page": None,
-        "original_text": None
+        "original_text": None,
+        "ID": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -97,20 +98,111 @@ def init_session_state():
 init_session_state()
 
 # --------------------- Utility Functions --------------------- #
-#def collab(username):
+def get_id(username):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
+    result = cursor.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return result
+
+
+def collab(username):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT file_id FROM file_collaborations WHERE owner_id = ? OR collaborator_id = ?", (get_id(username), get_id(username)))
+    results = cursor.fetchall()
+    conn.close()
+
+    if results:
+        st.subheader("Collab Files")
+        for row in results:
+            file_id = row[0]
+            
+        
+            edit_key = f"editing_{file_id}"
+            if edit_key not in st.session_state:
+                st.session_state[edit_key] = False
+            
+            with st.expander(f"File ID: {file_id}", expanded=st.session_state[edit_key]):
+                if not st.session_state[edit_key]:
+                    if st.button("Edit File", key=f"edit_{file_id}"):
+                        st.session_state[edit_key] = True
+                        st.rerun()
+                
+                if st.session_state[edit_key]:
+                    conn = sqlite3.connect("users.db")
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT data FROM files WHERE file_id = ?", (file_id,))
+                    file_data = cursor.fetchone()
+                    conn.close()
+                    
+                    if file_data:
+                        edited_content = st.text_area(
+                            "File Content", 
+                            value=file_data[0], 
+                            height=300,
+                            key=f"editor_{file_id}"
+                        )
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("💾 Save", key=f"save_{file_id}"):
+                                try:
+                                    conn = sqlite3.connect("users.db")
+                                    cursor = conn.cursor()
+                                    cursor.execute(
+                                        "UPDATE files SET data = ? WHERE file_id = ?",
+                                        (edited_content, file_id)  
+                                    )
+                                    conn.commit()
+                                    conn.close()
+                                    st.success("File updated successfully ✅")
+                                    st.session_state[edit_key] = False
+                                    time.sleep(1)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error saving file: {str(e)}")
+                        
+                        with col2:
+                            if st.button("❌ Cancel", key=f"cancel_{file_id}"):
+                                st.session_state[edit_key] = False
+                                st.rerun()
+                    else:
+                        st.error("File not found.")
+                        
+def sent_to_collab(invite_id):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT inviter_id, invitee_id, file_id FROM invitations WHERE invite_id = ?", (invite_id,))
+    row = cursor.fetchone()
+    
+    if row:
+        owner_id, collaborator_id, file_id = owner_row[0]
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO file_collaborations (owner_id, collaborator_id, file_id, status, created_at) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (owner_id, collaborator_id, file_id, "active", now))
+        conn.commit()
+    conn.close()
+
+
+    
 
 
 def invites(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT invite_id, inviter_id, invitee_username, status, sent_at FROM invitations WHERE invitee_username = ?", (username,))
+    cursor.execute("SELECT invite_id, inviter_id, invitee, status, invite_at, file_id FROM invitations WHERE invitee = ?", (username,))
     results = cursor.fetchall()
     conn.close()
 
     if results:
         st.subheader("Invitations Received")
         for row in results:
-            invite_id, inviter_id, invitee_username, status, sent_at = row
+            invite_id, inviter_id, invitee_username, status, sent_at, file_id = row
             with st.expander(f"Invitation from {inviter_id} | Status: {status} | Sent at: {sent_at}"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -118,11 +210,13 @@ def invites(username):
                         if st.button("✅ Accept", key=f"accept_{invite_id}"):
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE invitations SET status = ? WHERE invite_id = ?", ("accepted", invite_id))
+                            cursor.execute("UPDATE invitations SET status = ?, accept_at = ? WHERE invite_id = ?", ("accepted", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), invite_id))
                             conn.commit()
                             conn.close()
                             st.success(f"Invitation from {inviter_id} accepted.")
+                            sent_to_collab(invite_id)
                             st.rerun()
+
                 with col2:
                     if st.button("❌ Decline", key=f"decline_{invite_id}"):
                         conn = sqlite3.connect("users.db")
@@ -137,38 +231,63 @@ def invites(username):
 
 def invitation(username):
     invite_user = st.text_input("Enter the username of the user you want to invite:")
+    file = st.text_input("Enter the file name:")
     if st.button("Send Invitation"):
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT username, ID FROM users where username = ?", (invite_user,))
-        result = cursor.fetchall()
-        conn.close()
-        if result:
-            user_name, user_id = result[0]
-            if invite_user in user_name:
+
+        # Check if the file exists and is owned by the inviter
+        cursor.execute("SELECT file_id FROM files WHERE owner_name = ? AND file_name = ?", (username, file))
+        file_result = cursor.fetchone()
+
+        if file_result:
+            file_id = file_result[0]
+
+            # Get the inviter's user ID
+            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+            inviter_row = cursor.fetchone()
+            inviter_id = inviter_row[0] if inviter_row else None
+
+            if not inviter_id:
+                st.error("Inviter ID not found.")
+                conn.close()
+                return
+
+            # Make sure the invited user exists
+            cursor.execute("SELECT username FROM users WHERE username = ?", (invite_user,))
+            invited_user_exists = cursor.fetchone()
+
+            if invited_user_exists:
                 invite_id = generate_random_id()
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                conn = sqlite3.connect("users.db")
-                cursor = conn.cursor()
-                cursor.execute("INSERT INTO invitations (invite_id, inviter_id, invitee_username, status, sent_at) VALUES (?, ?, ?, ?, ?)", 
-                            (invite_id, username, invite_user, "pending", now))
+
+                # Insert the invitation
+                cursor.execute("""
+                    INSERT INTO invitations 
+                    (invite_id, inviter_id, invitee, inviter, status, invite_at, file_name, file_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (invite_id, inviter_id, invite_user, username, "pending", now, file, file_id))
+
                 conn.commit()
-                conn.close()
                 st.success(f"Invitation sent to {invite_user}.")
             else:
-                st.error("User not found.")
+                st.error("Invited user not found.")
+        else:
+            st.error("File not found or not owned by you.")
 
 def same_username(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT username FROM users")
-    conn.commit()
-    normal_result = [row[0] for row in cursor.fetchall()]
-    cursor.execut("SELECT username FROM super_users")
-    conn.commit()
-    super_result = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute("""
+        SELECT username FROM users
+        UNION
+        SELECT username FROM super_users
+    """)
+    all_usernames = [row[0] for row in cursor.fetchall()]
+
     conn.close()
-    if username in normal_result or username in super_result:
+    if username in all_usernames:
         return True
     else:
         return False
@@ -185,7 +304,7 @@ def registry_approval(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by WHERE username = ?",
+        "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by = ? WHERE username = ?",
         (1, approved_Date, 0, username, st.session_state["username"])
     )
     conn.commit()
@@ -200,6 +319,7 @@ def token_add_minus(username, token):
     conn.commit()
     conn.close()
     st.session_state["tokens"] = updated_tokens
+
 
 def delete_registery(ID):
     conn = sqlite3.connect("users.db")
@@ -401,15 +521,21 @@ def homepage(username):
                 cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
                 result = cursor.fetchone()
                 ID = result[0]
-                cursor.execute("INSERT INTO files (file_id, owner_id, file_name, data, created_at) VALUES (?, ?, ?, ?, ?)",(save_id, ID, File_name, st.session_state["original_text"], datetime.now()))
+                cursor.execute("INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",(save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
                 conn.commit()
                 conn.close()
-                st.success("Save complete")           
+                st.success("Save complete")
+    if st.session_state["page"] == 'invites':
+        invites(username)
+    if st.session_state["page"] == 'invitation':
+        invitation(username)
+    if st.session_state["page"] == 'collab':
+        collab(username)
 # Paid user interface
 def paid_user():
     username = st.session_state["username"]
-    tokens = st.session_state["tokens"]
-    st.sidebar.write(f"Token Balance: {tokens}")
+   #tokens = st.session_state["tokens"]
+    st.sidebar.write("Token Balance:", st.session_state["tokens"])
     homepage(username)
     token_purchase_modal(username)
     if st.session_state.get("logout") == True:
