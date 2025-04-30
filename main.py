@@ -87,7 +87,8 @@ def init_session_state():
         "super_users": False,
         "checks_approval": False,
         "Done_approving": False,
-        "page": None
+        "page": None,
+        "original_text": None
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -199,7 +200,6 @@ def token_add_minus(username, token):
     conn.commit()
     conn.close()
     st.session_state["tokens"] = updated_tokens
-    st.rerun()
 
 def delete_registery(ID):
     conn = sqlite3.connect("users.db")
@@ -224,6 +224,7 @@ def word_difference(original, edited, username):
     if username:
         token_add_minus(username, -5 * difference)
     st.session_state['corrected_text'] = ' '.join(result)
+    st.session_state["original_text"] = ' '.join(edited_words)
 
 def add_logout(username):
     conn = sqlite3.connect("users.db")
@@ -363,22 +364,21 @@ def homepage(username):
     
     prompt = st.text_area("Enter text to correct:", height=300)
     Instruction = (
-        "Please review the following text for any errors. "
-        "If there are errors, correct them and return only the corrected text. "
-        "If the text is already correct, return the original text exactly as it is, "
-        "without any additional comments or explanations."
-        f"prompt:{prompt} "
-    )
+            "Correct the following text for grammar and spelling. "
+            "Do not add any explanation, comments, quotation marks, or phrases like '(Corrected)'. "
+            "Only return the corrected text, exactly as it should appear.\n\n"
+            f"{prompt}"
+        )
 
     
-    check_prompt = prompt.split()
+
     upload_file = st.file_uploader("Upload a file", type="txt")
     if upload_file is not None:
         prompt = upload_file.read().decode("utf-8")
 
     text_to_AI = Instruction + prompt
     if st.button("Submit") and prompt:
-        if username == None and len(check_prompt) > 20:
+        if username == None and len(prompt.split()) > 20:
             st.error("Text length exceeds limit for free users.")
             trigger_lockout(now)
             return
@@ -386,22 +386,25 @@ def homepage(username):
         response = response.get("response", "[No 'response' field found]")
         word_difference(prompt, response, username)
     
-    
     if "corrected_text" in st.session_state:
         st.markdown("""
             <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; max-height: 300px; overflow-y: auto;">
-            """ + st.session_state["corrected_text"] + """""
+            """ + st.session_state["corrected_text"] + """
             </div>
             """, unsafe_allow_html=True)
         if username is not None:
-            if st.button("Save File"):
-                File_name = st.text_input("Input a file name:")
-                conn = sqlite3.connect('Files.db')
+            File_name = st.text_input("Input a file name:")
+            if st.button("Save File") and File_name:
+                conn = sqlite3.connect('users.db')
                 cursor = conn.cursor()
                 save_id = generate_random_id()
-                cursor.execute("INSERT INTO Files (save_id, user_id, file_name, data, created_at) VALUES (?, ?, ?, ?, ?)",(save_id, username, File_name, st.session_state["corrected_text"], datetime.now()))
+                cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
+                result = cursor.fetchone()
+                ID = result[0]
+                cursor.execute("INSERT INTO files (file_id, owner_id, file_name, data, created_at) VALUES (?, ?, ?, ?, ?)",(save_id, ID, File_name, st.session_state["original_text"], datetime.now()))
                 conn.commit()
-                conn.close()            
+                conn.close()
+                st.success("Save complete")           
 # Paid user interface
 def paid_user():
     username = st.session_state["username"]
