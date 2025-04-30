@@ -8,54 +8,46 @@ import random
 import string
 import difflib
 
-#Button to open the home page in a new browser tab
 
-def go_home_button(key_suffix=""):
-    # Use a special key to mark when the button was clicked
-    if "go_home_clicked" not in st.session_state:
-        st.session_state["go_home_clicked"] = False
-
-    button_key = f"go_home_{key_suffix}"
-
-    if st.session_state["go_home_clicked"]:
-        # Reset states only on rerun pass-through
-        st.session_state["login"] = False
-        st.session_state["register"] = False
-        st.session_state["checks_approval"] = False
-        st.session_state["pay_clicked"] = False
-        st.session_state["confirm_clicked"] = False
-        st.session_state["go_home_clicked"] = False  # Reset flag
-        st.rerun()
-
-    if st.button("🏠 Go to Home Page", key=button_key):
-        st.session_state["go_home_clicked"] = True
-        st.rerun()
-        
 # --------------------- Session State Initialization --------------------- #
 def navbar():
     st.markdown("---")
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(5)
+        cols = st.columns(6)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
                 st.rerun()
         with cols[1]:
-            if st.button("💰 Tokens", key="nav_tokens_paid"):
-                st.session_state["page"] = "tokens"
+            if st.button("✉️ Invitation", key="nav_invitation_paid"):
+                st.session_state["page"] = "invitation"
                 st.rerun()
         with cols[2]:
+            if st.button("📨 Invites", key="nav_invites_paid"):
+                st.session_state["page"] = "invites"
+                st.rerun()
+        with cols[3]:
             if st.button("🤝 Collab", key="nav_collab_paid"):
                 st.session_state["page"] = "collab"
                 st.rerun()
-        with cols[3]:
+        with cols[4]:
             if st.button("📂 Files Saved", key="nav_files_paid"):
                 st.session_state["page"] = "files_saved"
-        with cols[4]:
+        with cols[5]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
+    elif st.session_state.get("super_users"):
+        cols = st.columns(2)
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_paid"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("Approval"):
+                st.session_state["page"] = "approval"
+                st.rerun
 
     else:
         # Free User Navbar
@@ -104,14 +96,81 @@ def init_session_state():
 init_session_state()
 
 # --------------------- Utility Functions --------------------- #
+#def collab(username):
+
+
+def invites(username):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT invite_id, inviter_id, invitee_username, status, sent_at FROM invitations WHERE invitee_username = ?", (username,))
+    results = cursor.fetchall()
+    conn.close()
+
+    if results:
+        st.subheader("Invitations Received")
+        for row in results:
+            invite_id, inviter_id, invitee_username, status, sent_at = row
+            with st.expander(f"Invitation from {inviter_id} | Status: {status} | Sent at: {sent_at}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    if status == "pending":
+                        if st.button("✅ Accept", key=f"accept_{invite_id}"):
+                            conn = sqlite3.connect("users.db")
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE invitations SET status = ? WHERE invite_id = ?", ("accepted", invite_id))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Invitation from {inviter_id} accepted.")
+                            st.rerun()
+                with col2:
+                    if st.button("❌ Decline", key=f"decline_{invite_id}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE invitations SET status = ? WHERE invite_id = ?", ("declined", invite_id))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Invitation from {inviter_id} declined.")
+                        st.rerun()
+    else:
+        st.info("No invitations received.")
+
+def invitation(username):
+    invite_user = st.text_input("Enter the username of the user you want to invite:")
+    if st.button("Send Invitation"):
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, ID FROM users where username = ?", (invite_user,))
+        result = cursor.fetchall()
+        conn.close()
+        if result:
+            user_name, user_id = result[0]
+            if invite_user in user_name:
+                invite_id = generate_random_id()
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn = sqlite3.connect("users.db")
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO invitations (invite_id, inviter_id, invitee_username, status, sent_at) VALUES (?, ?, ?, ?, ?)", 
+                            (invite_id, username, invite_user, "pending", now))
+                conn.commit()
+                conn.close()
+                st.success(f"Invitation sent to {invite_user}.")
+            else:
+                st.error("User not found.")
 
 def same_username(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("SELECT username FROM users")
-    result = [row[0] for row in cursor.fetchall()]
+    conn.commit()
+    normal_result = [row[0] for row in cursor.fetchall()]
+    cursor.execut("SELECT username FROM super_users")
+    conn.commit()
+    super_result = [row[0] for row in cursor.fetchall()]
     conn.close()
-    return username not in result
+    if username in normal_result or username in super_result:
+        return True
+    else:
+        return False
 
 def trigger_lockout(now):
     st.session_state.lockout_until = now + timedelta(minutes=3)
@@ -125,8 +184,8 @@ def registry_approval(username):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ? WHERE username = ?",
-        (1, approved_Date, 0, username)
+        "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by WHERE username = ?",
+        (1, approved_Date, 0, username, st.session_state["username"])
     )
     conn.commit()
     conn.close()
@@ -162,10 +221,9 @@ def word_difference(original, edited, username):
             difference += max(i2 - i1, j2 - j1)
             for word in edited_words[j1:j2]:
                 result.append(f'<mark>{word}</mark>')
-                #st.markdown(word, unsafe_allow_html=True)
     if username:
         token_add_minus(username, -5 * difference)
-    return ' '.join(result), -5*difference
+    st.session_state['corrected_text'] = ' '.join(result)
 
 def add_logout(username):
     conn = sqlite3.connect("users.db")
@@ -179,17 +237,18 @@ def register():
     st.title("Register Page")
     username = st.text_input("Username", max_chars = 50)
     password = st.text_input("Password", type="password", max_chars = 50)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    register_id = generate_random_id()
+    
 
     if st.button("Register"):
-        if not same_username(username):
+        if same_username(username):
             st.error("Username already exists.")
         elif username and password:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            register_id = generate_random_id()
             try:
                 conn = sqlite3.connect("users.db")
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO username (username, password, ID, register_date, account_approval) VALUES (?, ?, ?, ?, ?)", (username, password, register_id, now, 0))
+                cursor.execute("INSERT INTO users (username, password, ID, register_date, account_approval) VALUES (?, ?, ?, ?, ?)", (username, password, register_id, now, 0))
                 conn.commit()
                 conn.close()
                 st.success(f"Registration successful! Your ID is '{register_id}', which can be used to check your approval. Now wait for approval.")
@@ -199,7 +258,6 @@ def register():
             st.error("Please fill in all fields.")
 
 def login():
-    go_home_button("login")
     st.title("Login Page")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -208,12 +266,10 @@ def login():
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
         cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ?", (username, password))
+        conn.commit()
         result = cursor.fetchone()
-        conn.close()
-
-        conn = sqlite3.connect("super_users.db")
-        cursor = conn.cursor()
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
+        conn.commit()
         super_result = cursor.fetchone()
         conn.close()
 
@@ -228,38 +284,37 @@ def login():
             st.error("Invalid username or password")
 
 def super_user():
-    go_home_button("super_user")
     st.title("Super User Page")
     username = st.session_state["username"]
     st.sidebar.write(f"Welcome, {username}!")
 
-    conn = sqlite3.connect("registering_users.db")
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM registering_users WHERE register_status = 'Waiting for approval'")
+    cursor.execute("SELECT username, ID, account_approval FROM users WHERE account_approval = 0")
     results = cursor.fetchall()
     conn.close()
 
     if results:
         st.subheader("Users Awaiting Approval")
         for row in results:
-            register_id = row[2]
-            with st.expander(f"User: {row[0]} | ID: {register_id} | Status: {row[4]}"):
+            register_id = row[1]
+            with st.expander(f"User: {row[0]} | ID: {register_id} | Status: Waiting for Approval"):
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✅ Approve", key=f"approve_{register_id}"):
-                        conn = sqlite3.connect("registering_users.db")
+                        conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
-                        cursor.execute("UPDATE registering_users SET register_status = 'Approved' WHERE register_id = ?", (register_id,))
+                        cursor.execute("UPDATE users SET account_approval = 1 WHERE register_id = ?", (register_id,))
                         conn.commit()
                         conn.close()
-                        registry_approval(row[0])
                         st.success(f"{row[0]} has been approved.")
+                        registry_approval(row[0])
                         st.rerun()
                 with col2:
                     if st.button("❌ Reject", key=f"reject_{register_id}"):
-                        conn = sqlite3.connect("registering_users.db")
+                        conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
-                        cursor.execute("UPDATE registering_users SET register_status = 'Rejected' WHERE register_id = ?", (register_id,))
+                        cursor.execute("DELETE FROM users WHERE register_id = ?", (register_id,))
                         conn.commit()
                         conn.close()
                         st.success(f"{row[0]} has been rejected.")
@@ -267,15 +322,15 @@ def super_user():
     else:
         st.info("No users waiting for approval.")
 
+
+
+
 # The rest (homepage, token_purchase_modal, free_user, paid_user) continues below...
 def token_purchase_modal(username):
     modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
-    if st.session_state.get("page") == "tokens":
+    if st.session_state['page'] == "tokens":
         st.session_state["pay_clicked"] = True
-        modal.open()
-
-    if modal.is_open():
-        with modal.container():
+        with st.sidebar:
             st.markdown("<h1 style='color: green;'>100 Tokens = $1.00</h1>", unsafe_allow_html=True)
             amount_t = st.text_input("Pay: ", value="0", key="pay_amount")
 
@@ -305,28 +360,48 @@ def homepage(username):
             timer_placeholder.warning(f"⏳ You're temporarily locked out. Please wait {mins:02d}:{secs:02d} (mm:ss)")
             time.sleep(1)
         st.rerun()
-    Instruction = "Please edit the text if it has any grammar error, you don't need to return anything else other than the text itself."
-    prompt = st.text_input("Enter text to correct:")
+    
+    prompt = st.text_area("Enter text to correct:", height=300)
+    Instruction = (
+        "Please review the following text for any errors. "
+        "If there are errors, correct them and return only the corrected text. "
+        "If the text is already correct, return the original text exactly as it is, "
+        "without any additional comments or explanations."
+        f"prompt:{prompt} "
+    )
+
+    
+    check_prompt = prompt.split()
     upload_file = st.file_uploader("Upload a file", type="txt")
     if upload_file is not None:
         prompt = upload_file.read().decode("utf-8")
 
     text_to_AI = Instruction + prompt
     if st.button("Submit") and prompt:
-        if username == None and len(prompt) > 20:
+        if username == None and len(check_prompt) > 20:
             st.error("Text length exceeds limit for free users.")
             trigger_lockout(now)
             return
         response = ollama.generate(model="mistral", prompt=text_to_AI)
         response = response.get("response", "[No 'response' field found]")
-        new_response, token_deducted = word_difference(prompt, response, username)
-        st.session_state["corrected_text"] = new_response
-        
-    if "corrected_text" in st.session_state:
-        st.markdown("**LLM Output:**", unsafe_allow_html=True)
-        st.markdown(st.session_state["corrected_text"], unsafe_allow_html=True)
+        word_difference(prompt, response, username)
     
-            
+    
+    if "corrected_text" in st.session_state:
+        st.markdown("""
+            <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; max-height: 300px; overflow-y: auto;">
+            """ + st.session_state["corrected_text"] + """""
+            </div>
+            """, unsafe_allow_html=True)
+        if username is not None:
+            if st.button("Save File"):
+                File_name = st.text_input("Input a file name:")
+                conn = sqlite3.connect('Files.db')
+                cursor = conn.cursor()
+                save_id = generate_random_id()
+                cursor.execute("INSERT INTO Files (save_id, user_id, file_name, data, created_at) VALUES (?, ?, ?, ?, ?)",(save_id, username, File_name, st.session_state["corrected_text"], datetime.now()))
+                conn.commit()
+                conn.close()            
 # Paid user interface
 def paid_user():
     username = st.session_state["username"]
@@ -340,32 +415,31 @@ def paid_user():
         st.session_state["username"] = None
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
-
         st.rerun()
+    
+
 def free_user():
     if not st.session_state["page"] == "check_register":
         homepage(None)
         if st.session_state["page"] == "check_register":
             st.session_state["checks_approval"] = True
             st.rerun()
-    elif st.session_state["checks_approval"]:
-        go_home_button("free_user")
+    elif st.session_state["page"] == "check_register":
         ID = st.text_input("Enter your ID to check approval:")
         if st.button("Check Approval"):
-            conn = sqlite3.connect("registering_users.db")
+            conn = sqlite3.connect('users.db')
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM registering_users WHERE register_id = ?", (ID,))
+            cursor.execute("SELECT account_approval FROM users WHERE ID = ?", (ID,))
             conn.commit()
-            result = cursor.fetchone()
+            result = [row[0] for row in cursor.fetchall()]
             conn.close()
-            if result[4] == "Approved" or result[4] == "Rejected":
-                st.success(f"Your registration status is: {result[4]}")
-                delete_registery(ID)
-            elif result[4] == "Waiting for approval":
-                st.warning(f"Your registration status is: {result[4]}")
+            if result:
+                if result[0] == 1:
+                    st.success(f"Your registration status has been approved!")
+                elif result[0] == 0:
+                    st.warning("Your registration is still pending approval.")
             else:
-                st.error("Invalid ID or not found.")
-
+                st.error("Invalid ID or registration not found.")
 
 
 # Main execution
@@ -382,5 +456,3 @@ else:
         register()
     else:
         free_user()
-        if st.session_state["page"] == "check_register":
-            checks_approval()
