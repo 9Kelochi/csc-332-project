@@ -36,15 +36,63 @@ init_session_state()
 
 def navbar():
     st.markdown("---")
+    
     if st.session_state.get("paid_users"):
+        # Paid User Navbar
         cols = st.columns(6)
-        # Paid User Navbar items
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_paid"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("✉️ Invitation", key="nav_invitation_paid"):
+                st.session_state["page"] = "invitation"
+                st.rerun()
+        with cols[2]:
+            if st.button("📨 Invites", key="nav_invites_paid"):
+                st.session_state["page"] = "invites"
+                st.rerun()
+        with cols[3]:
+            if st.button("🤝 Collab", key="nav_collab_paid"):
+                st.session_state["page"] = "collab"
+                st.rerun()
+        with cols[4]:
+            if st.button("📂 Files Saved", key="nav_files_paid"):
+                st.session_state["page"] = "files_saved"
+        with cols[5]:
+            if st.button("🚪 Logout", key="nav_logout_paid"):
+                st.session_state["logout"] = True
     elif st.session_state.get("super_users"):
         cols = st.columns(2)
-        # Super User Navbar items
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_paid"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("Approval"):
+                st.session_state["page"] = "approval"
+                st.rerun
+
     else:
+        # Free User Navbar
         cols = st.columns(4)
-        # Free User Navbar items
+        with cols[0]:
+            if st.button("🏠 Home", key="nav_home_free"):
+                st.session_state["page"] = "home"
+                st.rerun()
+        with cols[1]:
+            if st.button("🔑 Login", key="nav_login_free"):
+                st.session_state["page"] = "login"
+                st.rerun()
+        with cols[2]:
+            if st.button("📝 Register", key="nav_register_free"):
+                st.session_state["page"] = "register"
+                st.rerun()
+        with cols[3]:
+            if st.button("🔎 Check Registration", key="nav_check_free"):
+                st.session_state["page"] = "check_register"
+                st.rerun()
+
     st.markdown("---")
 
 # --------------------- Utility Functions (Cross-User) --------------------- #

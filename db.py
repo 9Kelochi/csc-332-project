@@ -38,7 +38,7 @@ def insert_user(username, password, last_logout_time, tokens, accountApproved, u
 # Kel,3917,1712347200,120.0
 # fen,2917,1712347200,123.0
 # Lun,3344,17123
-create_db()
-insert_user("Kel",3917,1712347200,120.0, True, "Paid", 50)
-insert_user("fen",2917,1712347200,123.0, True, "Paid", 17)
-insert_user("Lun",2917,1712347200,123.0, True, "Paid", 1)
+# create_db()
+# insert_user("Kel",3917,1712347200,120.0, True, "Paid", 50)
+# insert_user("fen",2917,1712347200,123.0, True, "Paid", 17)
+# insert_user("Lun",2917,1712347200,123.0, True, "Paid", 1)
