@@ -39,7 +39,7 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(6)
+        cols = st.columns(7)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
@@ -60,6 +60,10 @@ def navbar():
             if st.button("📂 Files Saved", key="nav_files_paid"):
                 st.session_state["page"] = "files_saved"
         with cols[5]:
+            if st.button("💰 Buy Tokens", key="nav_tokens_paid"):
+                st.session_state["page"] = "tokens"
+                st.rerun()
+        with cols[6]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
     elif st.session_state.get("super_users"):
@@ -443,7 +447,7 @@ def invitation(username):
             st.error("File not found or not owned by you.")
 
 def token_purchase_modal(username):
-    modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
+    # modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
     if st.session_state['page'] == "tokens":
         st.session_state["pay_clicked"] = True
         with st.sidebar:
@@ -462,8 +466,14 @@ def token_purchase_modal(username):
                 if tokens_purchased > 0:
                     token_add_minus(username, tokens_purchased)
                     st.success(f"Purchased {int(tokens_purchased)} tokens!")
+                    st.rerun() # reset the page with updated token balance
                 else:
                     st.error("Please enter a valid amount.")
+
+            # close out option to buy tokens
+            if st.button("Close"):
+                st.session_state["page"] = "home"
+                st.rerun()
 
 def add_logout(username):
     conn = sqlite3.connect("users.db")
