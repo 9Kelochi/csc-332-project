@@ -1,4 +1,5 @@
 import sqlite3
+import csv
 
 # this function will set up the core tables we need for our database
 def create_tables(db_name="token_terminator.db"):
@@ -113,5 +114,32 @@ def create_tables(db_name="token_terminator.db"):
     conn.close()
     print("All tables created for'token_terminator.db'.")
 
+def create_blacklist_table():
+    # connect to users db
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    # create blacklisted words table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS blacklisted_words (
+            word TEXT PRIMARY KEY
+        )
+    ''')
+
+    # read words from csv file
+    with open('blacklisted_words.csv', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        words = [(row[0].strip(),) for row in reader if row]  # Clean and format each word as a tuple
+
+    # add them to blacklisted_words
+    cursor.executemany('''
+        INSERT OR IGNORE INTO blacklisted_words (word) VALUES (?)
+    ''', words)
+
+    # close connection
+    conn.commit()
+    conn.close()
+
 if __name__ == "__main__":
-    create_tables()
+    # create_tables()
+    create_blacklist_table()
