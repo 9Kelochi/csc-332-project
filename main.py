@@ -165,6 +165,8 @@ def trigger_lockout(now):
 def homepage(username):
     st.title("The Token Terminator")
     now = datetime.now()
+
+    # lock out free users if using more than 20 words
     if st.session_state.lockout_until and now < st.session_state.lockout_until:
         remaining = (st.session_state.lockout_until - now).seconds
         timer_placeholder = st.empty()
@@ -173,37 +175,100 @@ def homepage(username):
             timer_placeholder.warning(f"⏳ You're temporarily locked out. Please wait {mins:02d}:{secs:02d} (mm:ss)")
             time.sleep(1)
         st.rerun()
-    
-    prompt = st.text_area("Enter text to correct:", height=300)
-    Instruction = (
-            "Correct the following text for grammar and spelling. "
-            "Do not add any explanation, comments, quotation marks, or phrases like '(Corrected)'. "
-            "Only return the corrected text, exactly as it should appear.\n\n"
-            f"{prompt}"
-        )
 
-    
+    correction_mode = st.radio("Choose correction mode:", ["LLM Correction", "Self-Correction"], horizontal=True)
+    prompt = st.text_area("Enter text to correct:", height=300)
 
     upload_file = st.file_uploader("Upload a file", type="txt")
     if upload_file is not None:
         prompt = upload_file.read().decode("utf-8")
 
-    text_to_AI = Instruction + prompt
+    # load list of blacklisted words
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT word FROM blacklisted_words")
+    blacklisted = [row[0].lower() for row in cursor.fetchall()]
+    conn.close()
+
+    # replace blacklisted words with corresponding *
+    words = prompt.split()
+    cleaned_words = []
+    blacklist_token_cost = 0
+
+    for word in words:
+        clean_word = word.strip(".,!?").lower()
+        if clean_word in blacklisted:
+            cleaned_words.append("*" * len(word))
+            blacklist_token_cost += len(word)
+        else:
+            cleaned_words.append(word)
+
+    cleaned_prompt = " ".join(cleaned_words)
+
+    # show updated version to be submitted 
+    if prompt:
+        st.subheader("Text with blacklisted words masked:")
+        st.markdown(f"<div style='background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>{cleaned_prompt}</div>", unsafe_allow_html=True)
+
+    # On Submit
     if st.button("Submit") and prompt:
-        if username == None and len(prompt.split()) > 20:
+        word_count = len(words)
+        user_tokens = st.session_state["tokens"]
+
+        # check free user token limit
+        if username is None and word_count > 20:
             st.error("Text length exceeds limit for free users.")
             trigger_lockout(now)
             return
-        response = ollama.generate(model="mistral", prompt=text_to_AI)
+
+        # check for enough tokens for paid users
+        if user_tokens < word_count and username is not None:
+            penalty = user_tokens // 2
+            st.session_state["tokens"] -= penalty
+            st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
+            return
+        else:
+            st.session_state["tokens"] -= word_count
+
+        # check for enough tokens for blacklisted words for paid users
+        if st.session_state["tokens"] < blacklist_token_cost and username is not None:
+            st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
+            return
+        else:
+            st.session_state["tokens"] -= blacklist_token_cost
+
+        # self correction option
+        if correction_mode == "Self-Correction":
+            token_cost = word_count // 2
+            if st.session_state["tokens"] < token_cost and username is not None:
+                st.error(f"Not enough tokens for self-correction (need {token_cost}).")
+                return
+            st.session_state["tokens"] -= token_cost
+            st.session_state["original_text"] = cleaned_prompt
+            st.session_state["corrected_text"] = cleaned_prompt
+            st.info("Self-correction complete.")
+            return
+
+        # LLM correction
+        instruction = (
+            "Correct the following text for grammar and spelling. "
+            "Do not add any explanation, comments, quotation marks, or phrases like '(Corrected)'. "
+            "Only return the corrected text, exactly as it should appear.\n\n"
+            f"{cleaned_prompt}"
+        )
+        response = ollama.generate(model="mistral", prompt=instruction)
         response = response.get("response", "[No 'response' field found]")
-        word_difference(prompt, response, username)
-    
+        word_difference(cleaned_prompt, response, username)
+
+    # show highlighted output
     if "corrected_text" in st.session_state:
         st.markdown("""
             <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; max-height: 300px; overflow-y: auto;">
             """ + st.session_state["corrected_text"] + """
             </div>
             """, unsafe_allow_html=True)
+
+        # save file if user is logged in
         if username is not None:
             File_name = st.text_input("Input a file name:")
             if st.button("Save File") and File_name:
@@ -213,16 +278,20 @@ def homepage(username):
                 cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
                 result = cursor.fetchone()
                 ID = result[0]
-                cursor.execute("INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",(save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
+                cursor.execute(
+                    "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
+                    (save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
                 conn.commit()
                 conn.close()
                 st.success("Save complete")
+
     if st.session_state["page"] == 'invites':
         invites(username)
     if st.session_state["page"] == 'invitation':
         invitation(username)
     if st.session_state["page"] == 'collab':
         collab(username)
+
 
 # --------------------- Free User Section --------------------- #
 def register():
