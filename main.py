@@ -557,47 +557,64 @@ def delete_registery(ID):
 # GUI change - add dark mode for paid users (light mode otherwise)
 def apply_theme():
     if st.session_state.get("paid_users"):
-        # Dark Mode
         st.markdown("""
             <style>
-                body {
-                    background-color: #0e1117;
-                    color: white;
+                /* Make menu item text black */
+                .st-emotion-cache-6mv2k3 {
+                    color: black !important;
                 }
-                .stApp {
-                    background-color: #0e1117;
-                    color: white;
-                }
-                .css-1d391kg, .css-ffhzg2, .css-1cpxqw2 {
-                    background-color: #0f2f2f;
-                    color: #d6ffd6;
-                    .sidebar {
-                        background-color: #143d3d;
-                    }
-            </style>
-        """, unsafe_allow_html=True)
-    else:
-        # Light Mode
-        st.markdown("""
-            <style>
-            body, .stApp {
-                background-color: #ffffff; /* Light background */
-                color: #000000;  /* Black text */
-            }
-            [data-testid="stSidebar"] {
-                background-color: #f0f2f6; /* Light sidebar */
-            }
-            h1, h2, h3, h4, h5, h6, p, div, span, label {
-                color: #000000;  /* Black text for headers, labels, and common elements */
-            }
-            button, .stButton>button {
-                background-color: #e0e0e0;
-                color: #000000; /* Black text on buttons */
-                border-radius: 8px;
-            }
-            </style>
-        """, unsafe_allow_html=True)
 
+                /* Optional: hotkey labels (like "r" for Rerun) */
+                .st-emotion-cache-rj14pv {
+                    color: black !important;
+                }
+
+                /* Optional: make menu background white for full contrast */
+                .stMainMenuPopover {
+                    background-color: white !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+                html, body, .stApp {
+                    background: linear-gradient(to bottom right, #115e59, #155e75, #1e3a8a) !important;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                header, .block-container {
+                    background-color: transparent !important;
+                }
+
+                [data-testid="stSidebar"] {
+                    background-color: rgba(255, 255, 255, 0.05) !important;
+                }
+
+                h1, h2, h3, h4, h5, h6, p, div, span, label {
+                    color: white !important;
+                }
+
+                .stButton>button {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                    border-radius: 8px;
+                }
+
+                .stTextInput>div>div>input {
+                    background-color: rgba(255, 255, 255, 0.1) !important;
+                    color: white !important;
+                }
+
+                .stFileUploader > div {
+                    color: black !important;
+                }
+
+                .stFileUploader span {
+                    color: black !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
 # --------------------- Main Execution --------------------- #
 navbar()
 apply_theme()
