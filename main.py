@@ -66,6 +66,7 @@ def navbar():
         with cols[6]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
+                
     elif st.session_state.get("super_users"):
         cols = st.columns(4)
         with cols[0]:
@@ -75,7 +76,7 @@ def navbar():
         with cols[1]:
             if st.button("Approval", key="nav_approval_super"):
                 st.session_state["page"] = "approval"
-                st.rerun
+                st.rerun()
         with cols[2]: 
             if st.button("Complaints", key="nav_complaint_super"): 
                 st.session_state["page"] = "complaints"
@@ -574,110 +575,33 @@ def paid_user():
         st.rerun()
 
 # --------------------- Super User Section --------------------- #
-def complaints():
-    st.title("Complaints Log")
 
-    # if view unresolved 
-    conn = sqlite3.connect("token_terminator.db") #("users.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ("UNRESOLVED")) # view unresolved complaints 
-    # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
-    results = cursor.fetchall()
+# PAGES 
+def super_home():    
+    conn = sqlite3.connect("token_terminator.db")#("users.db")
+    cursor1 = conn.cursor()
+    cursor1.execute("SELECT COUNT(word) FROM blacklist_requests WHERE status = 'PENDING'")
+    pbkls_count = cursor1.fetchall()[0]
+    cursor2 = conn.cursor()
+    cursor2.execute("SELECT COUNT(complaintID) FROM complaints WHERE status = 'PENDING'")
+    pcomp_count = cursor2.fetchall()[0]
+    cursor3 = conn.cursor()
+    cursor3.execute("SELECT COUNT(applicationID) FROM pending_users WHERE status = 'PENDING'")
+    apacc_count = cursor3.fetchall()[0]
     conn.close()
 
-    if results:
-        st.subheader("Unresolved Complaints")
-        for row in results:
-            complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
-            with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                col1, col2 = st.columns(2) 
-                with col1:
-                    if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
-                        conn = sqlite3.connect("token_terminator.db") #("users.db")
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
-                        st.rerun()
-                        # ADDITIONAL ACTIONS: 
-                        ## take away tokens from the punished user 
+    st.subheader(f"Pending users to review: {apacc_count}")
+    st.subheader(f"Pending complaints to review: {pcomp_count}")
+    st.subheader(f"Pending Blacklist words to review: {pbkls_count}")
+    #### fetch counts of pending actions: 
+    # - count: pending complaints to review! 
+    # - count: pending accounts to approve! 
+    # - count: pending blacklist words to approve! 
+    # - completed task statistics (for each of the above)
 
-                with col2:
-                    if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
-                        conn = sqlite3.connect("token_terminator.db") #("users.db")
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
-                        st.rerun()
-                        # ADDITIONAL ACTIONS: 
-                        ## take away tokens from the punished user 
-    else:
-        st.info("No Inactive Complaints.")
-
-
-    ###################################################################################
-    # if view resolved 
-    conn = sqlite3.connect("token_terminator.db") #("users.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ("UNRESOLVED")) # view unresolved complaints 
-    # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
-    results = cursor.fetchall()
-    conn.close()
-
-    if results:
-        st.subheader("Unresolved Complaints")
-        for row in results:
-            complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
-            with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                col1, col2 = st.columns(2) 
-                with col1:
-                    if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
-                        conn = sqlite3.connect("token_terminator.db") #("users.db")
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
-                        st.rerun()
-                        # ADDITIONAL ACTIONS: 
-                        ## take away tokens from the punished user 
-
-                with col2:
-                    if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
-                        conn = sqlite3.connect("token_terminator.db") #("users.db")
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
-                        st.rerun()
-                        # ADDITIONAL ACTIONS: 
-                        ## take away tokens from the punished user 
-    else:
-        st.info("No Inactive Complaints.")
-
-
-    # buttons:
-    # view  
-    # - view incomplete complaints log : done 
-    # - view completed* complaints log : 
-    # manipulate 
-    # - punish a user && mark as completed 
-    # - undo past complaints? herm. maybe not. 
-
-# def blacklist(): 
-  
-
-def super_user():
-    st.title("Super User Page")
-    username = st.session_state["username"]
-    st.sidebar.write(f"Welcome, {username}!")
-
-
-    # ethan: i will edit tn. 
+def approval_page(): 
+    st.header("Approval Page")
+    
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("SELECT username, ID, account_approval FROM users WHERE account_approval = 0")
@@ -712,6 +636,202 @@ def super_user():
     else:
         st.info("No users waiting for approval.")
 
+def complaints(): # can shorten code? improve k-complexity (action for final revisions)
+    st.header("Complaints Log")
+
+    complaints_log_mode = st.radio("Display Complaints:", ["Pending", "Resolved"], horizontal=True)
+    # if view unresolved 
+    if complaints_log_mode == "Pending":
+        conn = sqlite3.connect("token_terminator.db") #("users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ["PENDING"]) # view unresolved complaints 
+        # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
+        results = cursor.fetchall()
+        conn.close()
+
+        if results:
+            st.subheader("Pending Complaints")
+            for row in results:
+                complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
+                with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
+                    col1, col2 = st.columns(2) 
+                    with col1:
+                        if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
+                            conn = sqlite3.connect("token_terminator.db") #("users.db")
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
+                            st.rerun()
+                            # ADDITIONAL ACTIONS: 
+                            ## take away tokens from the punished user 
+
+                    with col2:
+                        if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
+                            conn = sqlite3.connect("token_terminator.db") #("users.db")
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
+                            st.rerun()
+                            # ADDITIONAL ACTIONS: 
+                            ## take away tokens from the punished user 
+        else:
+            st.info("No Pending Complaints.")
+
+    elif complaints_log_mode == "Resolved":
+        ###################################################################################
+        # if view resolved 
+        conn = sqlite3.connect("token_terminator.db") #("users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ["RESOLVED"]) # view unresolved complaints 
+        # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
+        results = cursor.fetchall()
+        conn.close()
+
+        if results:
+            st.subheader("Resolved Complaints")
+            for row in results:
+                complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
+                with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
+                    col1, col2 = st.columns(2) 
+                    with col1:
+                        if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
+                            conn = sqlite3.connect("token_terminator.db") #("users.db")
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
+                            st.rerun()
+                            # ADDITIONAL ACTIONS: 
+                            ## take away tokens from the punished user 
+
+                    with col2:
+                        if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
+                            conn = sqlite3.connect("token_terminator.db") #("users.db")
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
+                            st.rerun()
+                            # ADDITIONAL ACTIONS: 
+                            ## take away tokens from the punished user 
+        else:
+            st.info("No Resolved Complaints.")
+
+    else: 
+        st.info("ERROR COMPLAINT MODE") #temp? 
+
+    # buttons:
+    # view  
+    # - view incomplete complaints log : done 
+    # - view completed* complaints log : 
+    # manipulate 
+    # - punish a user && mark as completed 
+    # - undo past complaints? herm. maybe not. 
+
+def blacklist(): 
+    st.header("Edit Blacklist")
+    
+    #### CURRENT BLACKLIST; OPTIONS TO DELETE WORDS 
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT word FROM blacklisted_words ORDER BY word ASC") 
+    results = cursor.fetchall()
+    conn.close()
+
+    with st.expander("blacklist:", expanded=True):
+        if results:
+            for row in results:
+                col1, col2 = st.columns(2)
+                with col1:
+                    word = row[0]
+                    st.info(word) 
+
+                with col2:
+                    if st.button("DELETE", key=f"delete_{word}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM blacklisted_words WHERE word = ?", [word])
+                        conn.commit()
+                        conn.close()
+                        st.success(f"deleted: {word}")
+                        st.rerun()
+                    
+        else:
+            st.info("No Words in Blacklist.")
+
+
+    #### WORDS REQUESTED TO BE ADDED TO BLACKLIST BY PAID USERS 
+    conn = sqlite3.connect("token_terminator.db")  #("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT word FROM blacklist_requests ORDER BY word ASC") 
+    result2 = cursor.fetchall()
+    conn.close()
+
+    with st.expander("paid user's black list requests:", expanded=True):
+        if result2:
+            for row in result2:
+                col1, col2 = st.columns(2)
+                with col1:
+                    word = row[0]
+                    st.info(word) 
+
+                with col2:
+                    if st.button("ADD", key=f"paidadded_{word}") and word: 
+                        conn = sqlite3.connect("token_terminator.db")  #("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("INSERT INTO blacklisted_words (word) VALUES (?)", [word])
+                        conn.commit()
+                        conn.close()
+                        st.success(f"added: {word}")
+                        st.rerun()
+        else:
+            st.info("No Requested Words to be added to Blacklist")
+
+
+    #### SUPER MANUALLY ADDING NEW WORDS TO BLACKLIST 
+    new_word = st.text_area("Enter a new word:", height=68, max_chars = 255).lower() 
+    does_exist = False 
+    # check if word already exist in the blacklist table to prevent error of violating UNIQUE condition 
+    if st.button("Add Word",  key=f"superadded_{new_word}") and new_word: 
+        if results: 
+            for row in results:
+                if new_word == row[0]:
+                    does_exist = True
+
+        if does_exist == True: 
+            st.warning('This word already exists in the Blacklist') 
+        elif does_exist == False:
+            conn = sqlite3.connect("users.db")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO blacklisted_words (word) VALUES (?);", [new_word])
+            conn.commit()
+            conn.close()
+            st.success(f"Successfully added word: {new_word}")
+            st.rerun()
+        else:
+            st.warning('This should never appear') 
+
+def super_user():
+    username = st.session_state["username"]
+    st.sidebar.write(f"Welcome, {username}!")
+
+    st.title("Super User Page")
+    if st.session_state["page"] == 'home':
+        super_home()
+    if st.session_state["page"] == 'approval':
+        approval_page()
+    if st.session_state["page"] == 'complaints':
+        complaints()
+    if st.session_state["page"] == 'blacklist':
+        blacklist()
+
+# FUNCTIONS 
 def registry_approval(username):
     approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect("users.db")
