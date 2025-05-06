@@ -110,6 +110,22 @@ def create_tables(db_name="token_terminator.db"):
         );
     """)
 
+    # user-submitted rejection of LLM correction
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS llm_rejections (
+            rejection_id TEXT PRIMARY KEY,
+            username TEXT REFERENCES users(username),
+            original_text TEXT,
+            corrected_text TEXT,
+            reason TEXT,
+            status TEXT CHECK(status IN ('pending', 'accepted', 'rejected')) DEFAULT 'pending',
+            reviewed_by TEXT,
+            penalty_applied INTEGER DEFAULT 0,
+            submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at DATETIME
+        );
+    """)
+         
     conn.commit()
     conn.close()
     print("All tables created for'token_terminator.db'.")
