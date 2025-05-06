@@ -68,7 +68,7 @@ def navbar():
                 st.session_state["logout"] = True
                 
     elif st.session_state.get("super_users"):
-        cols = st.columns(4)
+        cols = st.columns(5)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"): # change to nav_home_super, consequently: must make super home page? 
                 st.session_state["page"] = "home"
@@ -84,6 +84,10 @@ def navbar():
         with cols[3]:
             if st.button("Blacklist", key="nav_Blacklist_super"): 
                 st.session_state["page"] = "blacklist"
+                st.rerun()
+        with cols[4]:
+            if st.button("Rejections", key="nav_rejection_super"):
+                st.session_state["page"] = "rejections"
                 st.rerun() 
 
     else:
@@ -161,10 +165,14 @@ def word_difference(original, edited, username):
             difference += max(i2 - i1, j2 - j1)
             for word in edited_words[j1:j2]:
                 result.append(f'<mark>{word}</mark>')
-    if username:
-        token_add_minus(username, -5 * difference)
+
     st.session_state['corrected_text'] = ' '.join(result)
     st.session_state["original_text"] = ' '.join(edited_words)
+
+    if username:
+        token_add_minus(username, -5 * difference)
+
+    return difference == 0.0 
 
 def trigger_lockout(now):
     st.session_state.lockout_until = now + timedelta(minutes=3)
@@ -267,7 +275,12 @@ def homepage(username):
         )
         response = ollama.generate(model="mistral", prompt=instruction)
         response = response.get("response", "[No 'response' field found]")
-        word_difference(cleaned_prompt, response, username)
+
+        no_diff = word_difference(cleaned_prompt, response, username)
+
+        if no_diff and len(cleaned_prompt.split()) > 10:
+            token_add_minus(username, 3)
+            st.success("No errors found in your text! You've earned +3 tokens.")
 
     # show highlighted output
     if "corrected_text" in st.session_state:
@@ -293,6 +306,33 @@ def homepage(username):
                 conn.commit()
                 conn.close()
                 st.success("Save complete")
+
+        # Reject LLM correction 
+        if username is not None and st.session_state["corrected_text"] != st.session_state["original_text"]:
+            st.subheader("Reject Correction (Optional)")
+            rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
+            if st.button("Submit Rejection"):
+                rejection_id = generate_random_id()
+                conn = sqlite3.connect("token_terminator.db")
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    INSERT INTO llm_rejections (
+                        rejection_id, username, original_text, corrected_text, reason
+                    ) VALUES (?, ?, ?, ?, ?)
+                """, (
+                    rejection_id,
+                    username,
+                    st.session_state["original_text"],
+                    st.session_state["corrected_text"],
+                    rejection_reason
+                ))
+
+                conn.commit()
+                conn.close()
+                st.success("Your rejection has been submitted for review.")
+                 
+
 
     if st.session_state["page"] == 'invites':
         invites(username)
@@ -817,6 +857,68 @@ def blacklist():
         else:
             st.warning('This should never appear') 
 
+# Rejection Review Panel
+def llm_rejections_review():
+    st.header("LLM Correction Rejections Review")
+
+    conn = sqlite3.connect("token_terminator.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT rejection_id, username, original_text, corrected_text, reason 
+        FROM llm_rejections 
+        WHERE status = 'pending'
+    """)
+    results = cursor.fetchall()
+    conn.close()
+
+    if results:
+        for row in results:
+            rejection_id, username, original, corrected, reason = row
+            with st.expander(f"Rejection from {username} | ID: {rejection_id[:6]}..."):
+                st.subheader("Original Text")
+                st.code(original, language="text")
+                st.subheader("LLM Correction")
+                st.markdown(corrected, unsafe_allow_html=True)
+                st.subheader("Reason for Rejection")
+                st.info(reason)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Accept Rejection", key=f"accept_{rejection_id}"):
+                        apply_llm_rejection_decision(rejection_id, username, penalty=1, decision="accepted")
+
+                with col2:
+                    if st.button("❌ Reject Rejection", key=f"reject_{rejection_id}"):
+                        apply_llm_rejection_decision(rejection_id, username, penalty=5, decision="rejected")
+
+    else:
+        st.info("No pending rejections to review.")
+
+def apply_llm_rejection_decision(rejection_id, username, penalty, decision):
+    conn = sqlite3.connect("token_terminator.db")
+    cursor = conn.cursor()
+    reviewed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+        UPDATE llm_rejections
+        SET status = ?, reviewed_by = ?, penalty_applied = ?, reviewed_at = ?
+        WHERE rejection_id = ?
+    """, (decision, st.session_state["username"], penalty, reviewed_at, rejection_id))
+
+    conn.commit()
+    conn.close()
+
+    # Now deduct tokens in users.db
+    conn2 = sqlite3.connect("users.db")
+    cursor2 = conn2.cursor()
+    cursor2.execute("UPDATE users SET tokens = tokens - ? WHERE username = ?", (penalty, username))
+    conn2.commit()
+    conn2.close()
+
+    st.success(f"Rejection marked as '{decision}'. {penalty} token(s) deducted from {username}.")
+    st.rerun()
+
+
 def super_user():
     username = st.session_state["username"]
     st.sidebar.write(f"Welcome, {username}!")
@@ -830,6 +932,8 @@ def super_user():
         complaints()
     if st.session_state["page"] == 'blacklist':
         blacklist()
+    if st.session_state["page"] == 'rejections':
+        llm_rejections_review()
 
 # FUNCTIONS 
 def registry_approval(username):
