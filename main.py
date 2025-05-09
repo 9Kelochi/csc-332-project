@@ -68,7 +68,7 @@ def navbar():
                 st.session_state["logout"] = True
                 
     elif st.session_state.get("super_users"):
-        cols = st.columns(5)
+        cols = st.columns(6)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"): # change to nav_home_super, consequently: must make super home page? 
                 st.session_state["page"] = "home"
@@ -89,6 +89,9 @@ def navbar():
             if st.button("Rejections", key="nav_rejection_super"):
                 st.session_state["page"] = "rejections"
                 st.rerun() 
+        with cols[5]:
+            if st.button("🚪 Logout", key="nav_logout_super"):
+                st.session_state["logout"] = True
 
     else:
         # Free User Navbar
@@ -375,7 +378,7 @@ def login():
     if st.button("Login", key="Login button"):
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ?", (username, password))
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = ?", (username, password, 1))
         conn.commit()
         result = cursor.fetchone()
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
@@ -858,7 +861,7 @@ def blacklist():
             st.warning('This should never appear') 
 
 # Rejection Review Panel
-def llm_rejections_review():
+def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE 
     st.header("LLM Correction Rejections Review")
 
     conn = sqlite3.connect("token_terminator.db")
@@ -918,7 +921,6 @@ def apply_llm_rejection_decision(rejection_id, username, penalty, decision):
     st.success(f"Rejection marked as '{decision}'. {penalty} token(s) deducted from {username}.")
     st.rerun()
 
-
 def super_user():
     username = st.session_state["username"]
     st.sidebar.write(f"Welcome, {username}!")
@@ -934,6 +936,13 @@ def super_user():
         blacklist()
     if st.session_state["page"] == 'rejections':
         llm_rejections_review()
+    if st.session_state.get("logout") == True:
+        add_logout(username)
+        st.session_state["super_users"] = False
+        st.session_state["username"] = None
+        st.session_state["tokens"] = 0
+        st.session_state["logout"] = False
+        st.rerun()
 
 # FUNCTIONS 
 def registry_approval(username):
