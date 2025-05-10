@@ -20,8 +20,8 @@ def init_session_state():
         "register": False,
         "login": False,
         "lockout_until": None,
-        "free_user": True,
-        "super_users": False,
+        "free_user": False,
+        "super_users": True,
         "checks_approval": False,
         "Done_approving": False,
         "page": None,
@@ -93,25 +93,33 @@ def navbar():
             if st.button("🚪 Logout", key="nav_logout_super"):
                 st.session_state["logout"] = True
 
-    else:
+    elif st.session_state.get("free_user"):
         # Free User Navbar
-        cols = st.columns(4)
+        cols = st.columns(2) # was 4 
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_free"):
                 st.session_state["page"] = "home"
                 st.rerun()
         with cols[1]:
-            if st.button("🔑 Login", key="nav_login_free"):
+            if st.button("X Logout", key="nav_login_free"):
+                st.session_state["logout"] = True
+
+    else: 
+        # NO user navbar 
+        cols = st.columns(3)
+        with cols[0]:   
+            if st.button("Register", key="nav_check_none"):
+                st.session_state["page"] = "register"
+                st.rerun()
+        with cols[1]:   
+            if st.button("🔑 Login", key="nav_login_none"):
                 st.session_state["page"] = "login"
                 st.rerun()
         with cols[2]:
-            if st.button("📝 Register", key="nav_register_free"):
-                st.session_state["page"] = "register"
-                st.rerun()
-        with cols[3]:
             if st.button("🔎 Check Registration", key="nav_check_free"):
                 st.session_state["page"] = "check_register"
                 st.rerun()
+
 
     st.markdown("---")
 
@@ -345,7 +353,9 @@ def homepage(username):
         collab(username)
 
 
-# --------------------- Free User Section --------------------- #
+
+# ---------------------  NO User Section  --------------------- #
+# if not logged in; obligate user to login. 
 def register():
     st.title("Register Page")
     username = st.text_input("Username", max_chars = 50)
@@ -381,10 +391,17 @@ def login():
         cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = ?", (username, password, 1))
         conn.commit()
         result = cursor.fetchone()
+
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
         conn.commit()
         super_result = cursor.fetchone()
+
+        cursor.execute("SELECT * FROM free_users WHERE username = ? AND account_approval = ?", (username, 1))
+        conn.commit()
+        free_result = cursor.fetchone() 
+
         conn.close()
+
 
         if result:
             st.session_state.update({"username": username, "tokens": result[0], "paid_users": True})
@@ -393,31 +410,53 @@ def login():
         elif super_result:
             st.session_state.update({"username": username, "password": password, "super_users": True})
             st.rerun()
+        elif free_result: 
+            st.session_state.update({"username": username})
         else:
             st.error("Invalid username or password")
 
+def check_register():
+    ID = st.text_input("Enter your ID to check approval:")
+    if st.button("Check Approval"):
+        conn = sqlite3.connect('users.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT account_approval FROM users WHERE ID = ?", (ID,))
+        conn.commit()
+        result = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        if result:
+            if result[0] == 1:
+                st.success(f"Your registration status has been approved!")
+            elif result[0] == 0:
+                st.warning("Your registration is still pending approval.")
+        else:
+            st.error("Invalid ID or registration not found.")
+
+
+def no_user():
+    #st.title("No User Page")
+    if st.session_state["page"] == 'register':
+        register()
+    if st.session_state["page"] == 'login':
+        login()
+    if st.session_state["page"] == 'check_register':
+        check_register()
+    st.text("You are not currently logged in, choose one of the options above")
+
+# --------------------- Free User Section --------------------- #
 def free_user():
-    if not st.session_state["page"] == "check_register":
-        homepage(None)
-        if st.session_state["page"] == "check_register":
-            st.session_state["checks_approval"] = True
-            st.rerun()
-    elif st.session_state["page"] == "check_register":
-        ID = st.text_input("Enter your ID to check approval:")
-        if st.button("Check Approval"):
-            conn = sqlite3.connect('users.db')
-            cursor = conn.cursor()
-            cursor.execute("SELECT account_approval FROM users WHERE ID = ?", (ID,))
-            conn.commit()
-            result = [row[0] for row in cursor.fetchall()]
-            conn.close()
-            if result:
-                if result[0] == 1:
-                    st.success(f"Your registration status has been approved!")
-                elif result[0] == 0:
-                    st.warning("Your registration is still pending approval.")
-            else:
-                st.error("Invalid ID or registration not found.")
+    username = st.session_state["username"]
+    # st.title("Free User Page")
+    homepage(username)
+    if st.session_state.get("logout") == True:
+        add_logout(username)
+        st.session_state["free_user"] = False
+        st.session_state["username"] = None
+        st.session_state["tokens"] = 0
+        st.session_state["logout"] = False
+        st.rerun()
+
+ 
 
 # --------------------- Paid User Section --------------------- #
 def collab(username):
@@ -620,7 +659,7 @@ def paid_user():
 # --------------------- Super User Section --------------------- #
 
 # PAGES 
-def super_home():    
+def super_home():    # this sucks. I need to fix
     conn = sqlite3.connect("token_terminator.db")#("users.db")
     cursor1 = conn.cursor()
     cursor1.execute("SELECT COUNT(word) FROM blacklist_requests WHERE status = 'PENDING'")
@@ -944,6 +983,8 @@ def super_user():
         st.session_state["logout"] = False
         st.rerun()
 
+    st.text("Welcome Admin")
+
 # FUNCTIONS 
 def registry_approval(username):
     approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1032,10 +1073,7 @@ if st.session_state["paid_users"]:
     paid_user()
 elif st.session_state["super_users"]:
     super_user()
+elif st.session_state["free_user"]:
+    free_user() 
 else:
-    if st.session_state["page"] == "login":
-        login()
-    elif st.session_state["page"] == "register":
-        register()
-    else:
-        free_user()
+    no_user()
