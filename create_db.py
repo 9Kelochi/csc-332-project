@@ -156,6 +156,70 @@ def create_blacklist_table():
     conn.commit()
     conn.close()
 
+
+def populate_super_admin():
+    # connect to users db
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    # insert default super admin user
+    cursor.execute('''
+        INSERT INTO super_users (username, password) VALUES (?, ?)
+    ''', ('admin', 'admin'))
+
+    conn.commit()
+    conn.close()
+
+
+def user_dictionary_table():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_dictionary (
+            word TEXT NOT NULL,
+            owner TEXT NOT NULL,
+            PRIMARY KEY (word, owner)
+        )
+    ''')
+
+    conn.commit()
+    conn.close()
+
+def populate_user_dictionary_table():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    sample_data = [
+        ("hee hee hee haw", "Kel"),
+        ("Lol", "Kel"),
+        ("Naurrr", "fen")
+    ]
+    
+    for word, owner in sample_data:
+        try:
+            cursor.execute("INSERT OR IGNORE INTO user_dictionary (word, owner) VALUES (?, ?)", (word, owner))
+        except sqlite3.IntegrityError:
+            pass  # skip duplicates
+
+    conn.commit()
+    conn.close()
+
+def delete_row():
+    
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM user_dictionary WHERE word='hee hee hee haw';")
+
+    conn.commit()
+    conn.close()
+    
+
 if __name__ == "__main__":
     # create_tables()
-    create_blacklist_table()
+    # create_blacklist_table()
+    # populate_super_admin()
+    # user_dictionary_table()
+    # populate_user_dictionary_table()
+    pass

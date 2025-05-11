@@ -163,19 +163,30 @@ def token_add_minus(username, token):
     conn.close()
     st.session_state["tokens"] = updated_tokens
 
-def word_difference(original, edited, username):
+def word_difference(original, edited, username, user_dict_words=None):
+    if user_dict_words is None:
+        user_dict_words = []
+
+    user_dict_words_lower = [w.lower() for w in user_dict_words]
+
     original_words = original.split()
     edited_words = edited.split()
     matcher = difflib.SequenceMatcher(None, original_words, edited_words)
     difference = 0.0
     result = []
+
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == 'equal':
             result.extend(edited_words[j1:j2])
+        
         elif tag in ('replace', 'insert'):
-            difference += max(i2 - i1, j2 - j1)
+            # difference += max(i2 - i1, j2 - j1)
             for word in edited_words[j1:j2]:
-                result.append(f'<mark>{word}</mark>')
+                if word.lower() in user_dict_words_lower:
+                    result.append(word)
+                else:
+                    result.append(f'<mark>{word}</mark>')
+                    difference += 1
 
     st.session_state['corrected_text'] = ' '.join(result)
     st.session_state["original_text"] = ' '.join(edited_words)
@@ -216,6 +227,11 @@ def homepage(username):
     cursor = conn.cursor()
     cursor.execute("SELECT word FROM blacklisted_words")
     blacklisted = [row[0].lower() for row in cursor.fetchall()]
+
+    # load in the user's dictionary (words not to replace)
+    cursor.execute("SELECT word FROM user_dictionary WHERE owner = ?", (username,))
+    user_dict_words = set(row[0].lower() for row in cursor.fetchall())
+    formatted_dict_words = ", ".join(user_dict_words)
     conn.close()
 
     # replace blacklisted words with corresponding *
@@ -224,10 +240,13 @@ def homepage(username):
     blacklist_token_cost = 0
 
     for word in words:
-        clean_word = word.strip(".,!?").lower()
-        if clean_word in blacklisted:
+        lower_word = word.lower()
+        # clean_word = word.strip(".,!?").lower()
+        if lower_word in blacklisted:
             cleaned_words.append("*" * len(word))
             blacklist_token_cost += len(word)
+        elif lower_word in user_dict_words:
+            cleaned_words.append(word)
         else:
             cleaned_words.append(word)
 
@@ -276,12 +295,15 @@ def homepage(username):
             st.session_state["corrected_text"] = cleaned_prompt
             st.info("Self-correction complete.")
             return
-
+        
         # LLM correction
         instruction = (
             "Correct the following text for grammar and spelling. "
             "Do not add any explanation, comments, quotation marks, or phrases like '(Corrected)'. "
-            "Only return the corrected text, exactly as it should appear.\n\n"
+            "Only return the corrected text, exactly as it should appear."
+            "If you see a word included the user's dictionary below, do NOT correct them."
+            "Leave the word in its position in the text in its exact form."
+            f"Words to NOT correct: {formatted_dict_words} \n\n"
             f"{cleaned_prompt}"
         )
         response = ollama.generate(model="mistral", prompt=instruction)
@@ -396,7 +418,7 @@ def login():
         conn.commit()
         super_result = cursor.fetchone()
 
-        cursor.execute("SELECT * FROM free_users WHERE username = ? AND account_approval = ?", (username, 1))
+        cursor.execute("SELECT * FROM users WHERE username = ? AND account_approval = ? AND password = ?", (username, 1, "none"))
         conn.commit()
         free_result = cursor.fetchone() 
 
