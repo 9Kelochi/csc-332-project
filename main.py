@@ -21,7 +21,7 @@ def init_session_state():
         "login": False,
         "lockout_until": None,
         "free_user": False,
-        "super_users": True,
+        "super_users": False,
         "checks_approval": False,
         "Done_approving": False,
         "page": None,
@@ -1090,6 +1090,10 @@ def apply_theme():
 # --------------------- Main Execution --------------------- #
 navbar()
 apply_theme()
+
+# ensure first page the user sees is the home screen
+if "page" not in st.session_state:
+    st.session_state["page"] = "home"
 
 if st.session_state["paid_users"]:
     paid_user()
