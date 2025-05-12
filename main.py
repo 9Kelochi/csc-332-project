@@ -257,6 +257,7 @@ def homepage(username):
         st.subheader("Text with blacklisted words masked:")
         st.markdown(f"<div style='background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>{cleaned_prompt}</div>", unsafe_allow_html=True)
 
+
     # On Submit
     if st.button("Submit") and prompt:
         word_count = len(words)
@@ -295,6 +296,39 @@ def homepage(username):
             st.session_state["corrected_text"] = cleaned_prompt
             st.info("Self-correction complete.")
             return
+
+        # the below deals with LLM correction option
+        # available models
+        available_models = ["mistral", "llama2", "gemma"]
+
+        # default model is set in session state
+        if "selected_model" not in st.session_state:
+            st.session_state["selected_model"] = "mistral"
+
+        if st.session_state.get("paid_users"):
+            try:
+                default_index = available_models.index(st.session_state["selected_model"])
+            except ValueError:
+                default_index = 0  # fallback to first model if invalid
+
+            llm_model = st.selectbox(
+                "Choose a language model:",
+                available_models,
+                index=default_index
+            )
+
+            if llm_model != st.session_state["selected_model"]:
+                if st.session_state["tokens"] >= 5:
+                    st.session_state["tokens"] -= 5
+                    st.session_state["selected_model"] = llm_model
+                    st.info(f"Switched LLM to {llm_model}. Charged 5 tokens.")
+                    st.rerun()  # reset
+                else:
+                    st.error("Not enough tokens to switch models.")
+                    return
+        else:
+            llm_model = "mistral"
+            st.info("Free accounts use the default LLM: mistral.")
         
         # LLM correction
         instruction = (
@@ -306,7 +340,7 @@ def homepage(username):
             f"Words to NOT correct: {formatted_dict_words} \n\n"
             f"{cleaned_prompt}"
         )
-        response = ollama.generate(model="mistral", prompt=instruction)
+        response = ollama.generate(model=llm_model, prompt=instruction)
         response = response.get("response", "[No 'response' field found]")
 
         no_diff = word_difference(cleaned_prompt, response, username)
@@ -380,27 +414,45 @@ def homepage(username):
 # if not logged in; obligate user to login. 
 def register():
     st.title("Register Page")
-    username = st.text_input("Username", max_chars = 50)
-    password = st.text_input("Password", type="password", max_chars = 50)
-    
+
+    account_type = st.radio("Choose account type:", ["Free", "Paid"], horizontal=True)
+
+    username = st.text_input("Username", max_chars=50)
+    password = ""
+
+    if account_type == "Paid":
+        password = st.text_input("Password", type="password", max_chars=50)
 
     if st.button("Register"):
         if same_username(username):
             st.error("Username already exists.")
-        elif username and password:
+        elif not username or (account_type == "Paid" and not password):
+            st.error("Please fill in all required fields.")
+        else:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             register_id = generate_random_id()
+
             try:
                 conn = sqlite3.connect("users.db")
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO users (username, password, ID, register_date, account_approval) VALUES (?, ?, ?, ?, ?)", (username, password, register_id, now, 0))
+
+                if account_type == "Paid":
+                    cursor.execute(
+                        "INSERT INTO users (username, password, ID, tokens, register_date, account_approval) VALUES (?, ?, ?, ?, ?, ?)",
+                        (username, password, register_id, 0, now, 0)
+                    )
+                else:  # free account => password is NULL
+                    cursor.execute(
+                        "INSERT INTO users (username, password, ID, register_date, account_approval) VALUES (?, NULL, ?, ?, ?)",
+                        (username, register_id, now, 0)
+                    )
+
                 conn.commit()
                 conn.close()
-                st.success(f"Registration successful! Your ID is '{register_id}', which can be used to check your approval. Now wait for approval.")
+                st.success(f"Registration successful! Your ID is '{register_id}'. Wait for approval.")
+
             except Exception as e:
                 st.error(f"An error occurred: {e}")
-        else:
-            st.error("Please fill in all fields.")
 
 def login():
     st.title("Login Page")
@@ -410,32 +462,47 @@ def login():
     if st.button("Login", key="Login button"):
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = ?", (username, password, 1))
-        conn.commit()
-        result = cursor.fetchone()
 
+        # check for paid user
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = 1", (username, password))
+        paid_result = cursor.fetchone()
+
+        # check for super user
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
-        conn.commit()
         super_result = cursor.fetchone()
 
-        cursor.execute("SELECT * FROM users WHERE username = ? AND account_approval = ? AND password = ?", (username, 1, "none"))
-        conn.commit()
-        free_result = cursor.fetchone() 
+        # check for free user (note empty string OR NULL)
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND account_approval = 1 AND (password IS NULL OR password = '')", (username,))
+        free_result = cursor.fetchone()
 
         conn.close()
 
+        if paid_result:
+            st.session_state.login_success = True
+            st.session_state.username = username
+            st.session_state.tokens = paid_result[0]
+            st.session_state.paid_users = True
 
-        if result:
-            st.session_state.update({"username": username, "tokens": result[0], "paid_users": True})
-            st.success(f"Login successful! You have {result[0]} tokens.")
-            st.rerun()
         elif super_result:
-            st.session_state.update({"username": username, "password": password, "super_users": True})
-            st.rerun()
-        elif free_result: 
-            st.session_state.update({"username": username})
+            st.session_state.login_success = True
+            st.session_state.username = username
+            st.session_state.super_users = True
+
+        elif free_result:
+            st.session_state.login_success = True
+            st.session_state.username = username
+            st.session_state.tokens = free_result[0]
+            st.session_state.paid_users = False
+            st.session_state.free_user = True
+
+
         else:
             st.error("Invalid username or password")
+            return
+
+        st.rerun()
+
+
 
 def check_register():
     ID = st.text_input("Enter your ID to check approval:")
@@ -722,7 +789,7 @@ def approval_page():
                     if st.button("✅ Approve", key=f"approve_{register_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
-                        cursor.execute("UPDATE users SET account_approval = 1 WHERE register_id = ?", (register_id,))
+                        cursor.execute("UPDATE users SET account_approval = 1 WHERE ID = ?", (register_id,))
                         conn.commit()
                         conn.close()
                         st.success(f"{row[0]} has been approved.")
@@ -1094,12 +1161,14 @@ apply_theme()
 # ensure first page the user sees is the home screen
 if "page" not in st.session_state:
     st.session_state["page"] = "home"
-
-if st.session_state["paid_users"]:
+if "username" not in st.session_state:
+    login()
+elif st.session_state.get("paid_users"):
     paid_user()
-elif st.session_state["super_users"]:
+elif st.session_state.get("super_users"):
     super_user()
-elif st.session_state["free_user"]:
-    free_user() 
+elif st.session_state.get("free_user"):
+    free_user()
 else:
     no_user()
+
