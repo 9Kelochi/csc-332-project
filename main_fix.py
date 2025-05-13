@@ -1183,7 +1183,7 @@ def delete_registery(ID):
     conn.commit()
     conn.close()
 
-# GUI change - add dark mode for paid users (light mode otherwise)
+
 def apply_theme():
     if st.session_state.get("paid_users"):
         st.markdown("""
@@ -1207,7 +1207,6 @@ def apply_theme():
         gradient = "linear-gradient(to bottom right, #ff758c, #ff7eb3)"
 
         try:
-            # If user background name is in session, query the gradient
             if "background" in st.session_state and st.session_state["background"]:
                 conn = sqlite3.connect('users.db')
                 cursor = conn.cursor()
@@ -1221,7 +1220,7 @@ def apply_theme():
         except Exception as e:
             st.error(f"Error applying background theme: {e}")
 
-        # Now safely apply the theme
+        #apply the theme
         st.markdown(f"""
             <style>
                 html, body, .stApp {{
