@@ -27,7 +27,8 @@ def init_session_state():
         "page": None,
         "original_text": None,
         "ID": None,
-        "Buy": False
+        "buy": False,
+        "background": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -40,7 +41,7 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(7)
+        cols = st.columns(8)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
@@ -65,6 +66,9 @@ def navbar():
                 st.session_state["buy"] = True
                 st.rerun()
         with cols[6]:
+            if st.button("🌈 Background", key="nav_background_color"):
+                st.session_state["page"] = "background_color" 
+        with cols[7]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
                 
@@ -765,8 +769,56 @@ def add_logout(username):
     conn.commit()
     conn.close()
 
+def background_selector(username):
+    st.markdown("### 🎨 Select Background Theme")
+
+    # Apply text styling to selectbox
+    st.markdown("""
+        <style>
+        div[data-baseweb="select"] * {
+            color: black !important;
+            background-color: white !important;
+        }
+        ul[data-testid="stSelectboxVirtualDropdown"] li div {
+            color: black !important;
+            background-color: white !important;
+        }
+
+        </style>
+    """, unsafe_allow_html=True)
+
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM background")
+    options = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    selected = st.selectbox("Choose a theme:", options)
+
+    if st.button("Save Theme"):
+        st.session_state["background"] = selected
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET background = ? WHERE username = ?", (selected, username))
+        conn.commit()
+        conn.close()
+        st.success("Background updated! Refreshing...")
+        st.rerun()
+
+
+
+
+
 def paid_user():
     username = st.session_state["username"]
+    if st.session_state.get("logout") == True:
+        add_logout(username)
+        st.session_state["paid_users"] = False
+        st.session_state["username"] = None
+        st.session_state["tokens"] = 0
+        st.session_state["logout"] = False
+        st.session_state["page"] = None
+        st.rerun()
    #tokens = st.session_state["tokens"]
     st.sidebar.write("Token Balance:", st.session_state["tokens"])
     if st.session_state.get("paid_users"):
@@ -780,13 +832,8 @@ def paid_user():
             invites(username)
         elif st.session_state["page"] == "collab":
             collab(username)
-        elif st.session_state.get("logout") == True:
-            add_logout(username)
-            st.session_state["paid_users"] = False
-            st.session_state["username"] = None
-            st.session_state["tokens"] = 0
-            st.session_state["logout"] = False
-            st.rerun()
+        elif st.session_state["page"] == "background_color":
+            background_selector(username)
 
 # --------------------- Super User Section --------------------- #
 
@@ -1157,46 +1204,76 @@ def apply_theme():
                 }
             </style>
         """, unsafe_allow_html=True)
-        st.markdown("""
+        gradient = "linear-gradient(to bottom right, #ff758c, #ff7eb3)"
+
+        try:
+            # If user background name is in session, query the gradient
+            if "background" in st.session_state and st.session_state["background"]:
+                conn = sqlite3.connect('users.db')
+                cursor = conn.cursor()
+                cursor.execute("SELECT gradient FROM background WHERE name = ?", (st.session_state['background'],))
+                result = cursor.fetchone()
+                conn.close()
+
+                if result and result[0]:
+                    gradient = result[0]
+
+        except Exception as e:
+            st.error(f"Error applying background theme: {e}")
+
+        # Now safely apply the theme
+        st.markdown(f"""
             <style>
-                html, body, .stApp {
-                    background: linear-gradient(to bottom right, #115e59, #155e75, #1e3a8a) !important;
+                html, body, .stApp {{
+                    background: {gradient} !important;
+                    background-attachment: fixed;
+                    background-size: cover;
                     margin: 0;
                     padding: 0;
-                }
+                }}
 
-                header, .block-container {
+                header, .block-container {{
                     background-color: transparent !important;
-                }
+                }}
 
-                [data-testid="stSidebar"] {
+                [data-testid="stSidebar"] {{
                     background-color: rgba(255, 255, 255, 0.05) !important;
-                }
+                }}
 
-                h1, h2, h3, h4, h5, h6, p, div, span, label {
+                h1, h2, h3, h4, h5, h6, p, div, span, label {{
                     color: white !important;
-                }
+                }}
 
-                .stButton>button {
+                .stButton>button {{
                     background-color: rgba(255, 255, 255, 0.1) !important;
                     color: white !important;
                     border-radius: 8px;
-                }
+                }}
 
-                .stTextInput>div>div>input {
+                .stTextInput>div>div>input {{
                     background-color: rgba(255, 255, 255, 0.1) !important;
                     color: white !important;
-                }
+                }}
 
-                .stFileUploader > div {
+                .stFileUploader > div,
+                .stFileUploader span {{
                     color: black !important;
-                }
+                }}
 
-                .stFileUploader span {
+                /* Selectbox dropdown and input text */
+                div[data-baseweb="select"] input {{
                     color: black !important;
-                }
+                    background-color: white !important;
+                }}
+
+                ul[data-testid="stSelectboxVirtualDropdown"] li div {{
+                    color: black !important;
+                    background-color: white !important;
+                }}
             </style>
         """, unsafe_allow_html=True)
+
+
 # --------------------- Main Execution --------------------- #
 navbar()
 apply_theme()
