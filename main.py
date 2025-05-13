@@ -200,10 +200,9 @@ def word_difference(original, edited, username, user_dict_words=None):
                     difference += 1
 
     st.session_state['corrected_text'] = ' '.join(result)
-    st.session_state["original_text"] = ' '.join(edited_words)
+    st.session_state["original_text"] = ' '.join(original_words)
+    st.session_state["llm_diff_count"] = difference  # Store the difference for token charge after user decides
 
-    if username:
-        token_add_minus(username, -5 * difference)
 
     return difference == 0.0 
 
@@ -399,6 +398,16 @@ def homepage(username):
             </div>
             """, unsafe_allow_html=True)
         
+        # accept corrections
+        if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
+            st.subheader("Accept LLM Correction?")
+            if st.button("Accept All Corrections"):
+                token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
+                st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
+                del st.session_state["llm_diff_count"]
+                st.rerun()
+
+         
         # save file if user is logged in
         if username is not None:
             File_name = st.text_input("Input a file name:")
@@ -422,7 +431,7 @@ def homepage(username):
             rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
             if st.button("Submit Rejection"):
                 rejection_id = generate_random_id()
-                conn = sqlite3.connect("token_terminator.db")
+                conn = sqlite3.connect("users.db")
                 cursor = conn.cursor()
 
                 cursor.execute("""
@@ -439,7 +448,12 @@ def homepage(username):
 
                 conn.commit()
                 conn.close()
+
+                # clear diff count so it can't get applied accidentally later
+                if "llm_diff_count" in st.session_state:
+                    del st.session_state["llm_diff_count"]
                 st.success("Your rejection has been submitted for review.")
+                st.rerun()
                  
 
 
@@ -1113,7 +1127,7 @@ def blacklist():
 def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE 
     st.header("LLM Correction Rejections Review")
 
-    conn = sqlite3.connect("token_terminator.db")
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("""
         SELECT rejection_id, username, original_text, corrected_text, reason 
@@ -1147,7 +1161,7 @@ def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE
         st.info("No pending rejections to review.")
 
 def apply_llm_rejection_decision(rejection_id, username, penalty, decision):
-    conn = sqlite3.connect("token_terminator.db")
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     reviewed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1328,4 +1342,3 @@ elif st.session_state.get("free_user"):
     free_user()
 else:
     no_user()
-
