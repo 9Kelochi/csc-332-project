@@ -396,11 +396,29 @@ def homepage(username):
 
     # show highlighted output
     if "corrected_text" in st.session_state:
+        
         st.markdown("""
-            <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; max-height: 300px; overflow-y: auto;">
-            """ + st.session_state["corrected_text"] + """
-            </div>
-            """, unsafe_allow_html=True)
+            <style>
+                .correction-box {
+                    background-color: #f9f9f9 !important;
+                    color: black !important;
+                    padding: 15px;
+                    border: 2px solid #ccc;
+                    border-radius: 10px;
+                    max-height: 300px;
+                    overflow-y: auto;
+                    font-size: 16px;
+                    line-height: 1.5;
+                }
+                .correction-box mark {
+                    background-color: yellow !important;
+                    color: black !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
+
         
         # accept corrections
         if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
@@ -508,8 +526,11 @@ def login():
         cursor = conn.cursor()
 
         # check for paid user
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
+        cursor.execute("SELECT tokens, background FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
         paid_result = cursor.fetchone()
+        if paid_result:
+            tokens, background = paid_result
+            
 
         # check for super user
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
@@ -524,10 +545,10 @@ def login():
         if paid_result:
             st.session_state.login_success = True
             st.session_state.username = username
-            st.session_state.tokens = paid_result[0]
+            st.session_state.tokens = tokens
             st.session_state.paid_users = True
             st.session_state['page'] = 'home'
-
+            st.session_state["background"] = background
         elif super_result:
             st.session_state.login_success = True
             st.session_state.username = username
