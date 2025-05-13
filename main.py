@@ -20,7 +20,7 @@ def init_session_state():
         "register": False,
         "login": False,
         "lockout_until": None,
-        "free_user": False,
+        "free_user": True,
         "super_users": False,
         "checks_approval": False,
         "Done_approving": False,
@@ -73,7 +73,7 @@ def navbar():
                 st.session_state["logout"] = True
                 
     elif st.session_state.get("super_users"):
-        cols = st.columns(6)
+        cols = st.columns(7)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"): # change to nav_home_super, consequently: must make super home page? 
                 st.session_state["page"] = "home"
@@ -82,19 +82,23 @@ def navbar():
             if st.button("Approval", key="nav_approval_super"):
                 st.session_state["page"] = "approval"
                 st.rerun()
-        with cols[2]: 
+        with cols[2]:
+            if st.button("Accept Upgrade", key="nav_accept_super"):
+                st.session_state["page"] = "accept"
+                st.rerun()
+        with cols[3]: 
             if st.button("Complaints", key="nav_complaint_super"): 
                 st.session_state["page"] = "complaints"
                 st.rerun() 
-        with cols[3]:
+        with cols[4]:
             if st.button("Blacklist", key="nav_Blacklist_super"): 
                 st.session_state["page"] = "blacklist"
                 st.rerun()
-        with cols[4]:
+        with cols[5]:
             if st.button("Rejections", key="nav_rejection_super"):
                 st.session_state["page"] = "rejections"
                 st.rerun() 
-        with cols[5]:
+        with cols[6]:
             if st.button("🚪 Logout", key="nav_logout_super"):
                 st.session_state["logout"] = True
 
@@ -606,16 +610,17 @@ def paid_page(username):
             tokens = float(100 * amount)
             conn = sqlite3.connect("users.db")
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET paid = 1 WHERE username = ?", (username,))
-            cursor.execute("UPDATE users SET tokens = ? WHERE username = ?", (tokens, username,))
+            app_id = generate_random_id()
+            cursor.execute("INSERT INTO pending_users VALUES (?, ?, ?, ?, ?)", (app_id, username, "paid", tokens, 0))
             conn.commit()
             conn.close()
-            st.success("Congrats now you're a official paid users. Please login in again for your paid users features to be in function")
+            st.success("Congrats you're request is under Review.")
         else:
             st.error("Error: Amount can't be less than $1")
 
 def free_user():
     username = st.session_state["username"]
+    st.text(username)
     # st.title("Free User Page")
     if st.session_state['page'] == 'home':
         homepage(username)
@@ -778,6 +783,28 @@ def invitation(username):
         else:
             st.error("File not found or not owned by you.")
 
+def complainfiledagainst(username): 
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT complainAbout, reasonByComplainer FROM complaints WHERE complainAbout = ? AND status = 0 AND defenseByComplainee = NULL", (username,))
+    result = cursor.fetchone()
+    
+    conn.close()
+
+    if result:
+        st.header("A complaint has been filed against you:")
+        st.info(result[1])  # result[1] is reasonByComplainer
+        
+        prompt = st.text_area("Enter your defense (response):", height=300)
+
+        if st.button("Submit") and prompt: 
+            conn = sqlite3.connect('users.db')
+            cursor = conn.cursor()
+            cursor.execute("UPDATE complaints SET defenseByComplainee = ? WHERE complainAbout = ?", (prompt, username))
+            conn.commit()
+            conn.close()
+
 def token_purchase_modal(username):
     # modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
     if st.session_state['buy'] == True:
@@ -856,6 +883,7 @@ def background_selector(username):
 
 def paid_user():
     username = st.session_state["username"]
+    complainfiledagainst(username)
     if st.session_state.get("logout") == True:
         add_logout(username)
         st.session_state["paid_users"] = False
@@ -884,21 +912,22 @@ def paid_user():
 
 # PAGES 
 def super_home():    # this sucks. I need to fix
-    conn = sqlite3.connect("token_terminator.db")#("users.db")
+    conn = sqlite3.connect("users.db")
     cursor1 = conn.cursor()
     cursor1.execute("SELECT COUNT(word) FROM blacklist_requests WHERE status = 'PENDING'")
-    pbkls_count = cursor1.fetchall()[0]
+    pbkls_count = cursor1.fetchall()
     cursor2 = conn.cursor()
-    cursor2.execute("SELECT COUNT(complaintID) FROM complaints WHERE status = 'PENDING'")
-    pcomp_count = cursor2.fetchall()[0]
+    cursor2.execute("SELECT COUNT(complaintID) FROM complaints WHERE status = 0")
+    pcomp_count = cursor2.fetchall()
     cursor3 = conn.cursor()
-    cursor3.execute("SELECT COUNT(applicationID) FROM pending_users WHERE status = 'PENDING'")
-    apacc_count = cursor3.fetchall()[0]
+    cursor3.execute("SELECT COUNT(applicationID) FROM pending_users WHERE status = 0")
+    apacc_count = cursor3.fetchall()
     conn.close()
 
-    st.subheader(f"Pending users to review: {apacc_count}")
-    st.subheader(f"Pending complaints to review: {pcomp_count}")
-    st.subheader(f"Pending Blacklist words to review: {pbkls_count}")
+    
+    st.text(f"Pending users to review: {apacc_count[0][0]}")
+    st.text(f"Pending complaints to review: {pcomp_count[0][0]}")
+    st.text(f"Pending Blacklist words to review: {pbkls_count[0][0]}")
     #### fetch counts of pending actions: 
     # - count: pending complaints to review! 
     # - count: pending accounts to approve! 
@@ -906,6 +935,7 @@ def super_home():    # this sucks. I need to fix
     # - completed task statistics (for each of the above)
 
 def approval_page(): 
+    # "activate" account is for free user approval/disaproval 
     st.header("Approval Page")
     
     conn = sqlite3.connect("users.db")
@@ -942,15 +972,56 @@ def approval_page():
     else:
         st.info("No users waiting for approval.")
 
+def accept_paid():    
+    # "pending_user" are requests to upgrade free user account 
+    st.header("Accept Upgrade")
+    
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT username, applicationID, status, amount_paid FROM pending_users WHERE status = 0")
+    results = cursor.fetchall()
+    conn.close()
+
+    if results:
+        st.subheader("Users Awaiting Upgrade")
+        for row in results:
+            applicationID = row[1]
+            with st.expander(f"User: {row[0]} | ID: {applicationID} | Status: Waiting Upgrade Approval"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Accept", key=f"accept_{applicationID}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE pending_users SET status = 1 WHERE applicationID = ?", (applicationID,))
+                        cursor.execute("UPDATE users SET paid = 1 WHERE username = ?", (row[0],))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"{row[0]} has been approved.")
+                        registry_approval(row[0])
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Decline", key=f"decline_{applicationID}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM pending_users WHERE applicationID = ?", (applicationID,))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"{row[0]} has been rejected.")
+                        st.rerun()
+    else:
+        st.info("No users waiting for approval.")
+
+
+
 def complaints(): # can shorten code? improve k-complexity (action for final revisions)
     st.header("Complaints Log")
 
     complaints_log_mode = st.radio("Display Complaints:", ["Pending", "Resolved"], horizontal=True)
     # if view unresolved 
     if complaints_log_mode == "Pending":
-        conn = sqlite3.connect("token_terminator.db") #("users.db")
+        conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ["PENDING"]) # view unresolved complaints 
+        cursor.execute("SELECT complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status FROM complaints WHERE status = ?", [0]) # view unresolved complaints 
         # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
         results = cursor.fetchall()
         conn.close()
@@ -958,14 +1029,26 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
         if results:
             st.subheader("Pending Complaints")
             for row in results:
-                complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
+                complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status = row # add [ reason, time_of ] columns 
                 with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                    col1, col2 = st.columns(2) 
-                    with col1:
+                    col1, col2, col3, col4, col5 = st.columns(5) 
+                    with col1: 
+                        ID = complaintID
+                        st.subheader(ID)
+
+                    with col2: 
+                        explanation = reasonByComplainer
+                        st.info(explanation)
+
+                    with col3: 
+                        defense = defenseByComplainee
+                        st.info(defense)
+                    
+                    with col4:
                         if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", complaintID))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
@@ -973,11 +1056,11 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                             # ADDITIONAL ACTIONS: 
                             ## take away tokens from the punished user 
 
-                    with col2:
+                    with col5:
                         if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINER punished", complaintID))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
@@ -992,7 +1075,7 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
         # if view resolved 
         conn = sqlite3.connect("token_terminator.db") #("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT complaintID, submittedBy, complainAbout, status FROM complaints WHERE status = ?", ["RESOLVED"]) # view unresolved complaints 
+        cursor.execute("SELECT complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status FROM complaints WHERE status = ?", [1]) # view unresolved complaints 
         # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
         results = cursor.fetchall()
         conn.close()
@@ -1000,14 +1083,26 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
         if results:
             st.subheader("Resolved Complaints")
             for row in results:
-                complaintID, submittedBy, complainAbout, status = row # add [ reason, time_of ] columns 
+                complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status = row # add [ reason, time_of ] columns 
                 with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                    col1, col2 = st.columns(2) 
-                    with col1:
+                    col1, col2, col3, col4, col5 = st.columns(5) 
+                    with col1: 
+                        ID = complaintID
+                        st.subheader(ID)
+
+                    with col2: 
+                        explanation = reasonByComplainer
+                        st.info(explanation)
+
+                    with col3: 
+                        defense = defenseByComplainee
+                        st.info(defense)
+                    
+                    with col4:
                         if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINEE punished", complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", complaintID))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
@@ -1015,11 +1110,11 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                             # ADDITIONAL ACTIONS: 
                             ## take away tokens from the punished user 
 
-                    with col2:
+                    with col5:
                         if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", ("RESOLVED", "COMPLAINER punished", complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINER punished", complaintID))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
@@ -1193,6 +1288,8 @@ def super_user():
         super_home()
     if st.session_state["page"] == 'approval':
         approval_page()
+    if st.session_state["page"] == 'accept':
+        accept_paid()
     if st.session_state["page"] == 'complaints':
         complaints()
     if st.session_state["page"] == 'blacklist':
@@ -1207,7 +1304,6 @@ def super_user():
         st.session_state["logout"] = False
         st.rerun()
 
-    st.text("Welcome Admin")
 
 # FUNCTIONS 
 def registry_approval(username):
