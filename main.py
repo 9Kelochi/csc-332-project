@@ -27,6 +27,8 @@ def init_session_state():
         "page": None,
         "original_text": None,
         "ID": None,
+        "buy": False,
+        "background": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -39,7 +41,7 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(7)
+        cols = st.columns(8)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
@@ -61,9 +63,12 @@ def navbar():
                 st.session_state["page"] = "files_saved"
         with cols[5]:
             if st.button("💰 Buy Tokens", key="nav_tokens_paid"):
-                st.session_state["page"] = "tokens"
+                st.session_state["buy"] = True
                 st.rerun()
         with cols[6]:
+            if st.button("🌈 Background", key="nav_background_color"):
+                st.session_state["page"] = "background_color" 
+        with cols[7]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
                 
@@ -95,7 +100,7 @@ def navbar():
 
     elif st.session_state.get("free_user"):
         # Free User Navbar
-        cols = st.columns(2) # was 4 
+        cols = st.columns(3) # was 4 
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_free"):
                 st.session_state["page"] = "home"
@@ -103,22 +108,28 @@ def navbar():
         with cols[1]:
             if st.button("X Logout", key="nav_login_free"):
                 st.session_state["logout"] = True
+        with cols[2]:
+            if st.button("Became Paid Users"):
+                st.session_state["page"] = "paid_page"
 
     else: 
         # NO user navbar 
+        if st.session_state['page'] == None:
+            st.markdown("""
+                <div style="background-color: #ffefc6; padding: 15px; border-radius: 10px; font-size: 30px;">
+                    ⚠️ You are not currently logged in. Choose one of the options above.
+                </div>
+            """, unsafe_allow_html=True)
         cols = st.columns(3)
-        with cols[0]:   
-            if st.button("Register", key="nav_check_none"):
-                st.session_state["page"] = "register"
-                st.rerun()
-        with cols[1]:   
-            if st.button("🔑 Login", key="nav_login_none"):
-                st.session_state["page"] = "login"
-                st.rerun()
+        with cols[0]:
+            if st.button("Register", key='no_user_register_button'):
+                st.session_state["page"] = 'register'
+        with cols[1]:
+            if st.button("Login", key='no_user_login_button'):
+                st.session_state["page"] = 'login'
         with cols[2]:
-            if st.button("🔎 Check Registration", key="nav_check_free"):
-                st.session_state["page"] = "check_register"
-                st.rerun()
+            if st.button("Check Register", key='no_user_check_register_button'):
+                st.session_state["page"] = 'check_registry'
 
 
     st.markdown("---")
@@ -255,9 +266,21 @@ def homepage(username):
     # show updated version to be submitted 
     if prompt:
         st.subheader("Text with blacklisted words masked:")
-        st.markdown(f"<div style='background-color: #f0f0f0; padding: 10px; border-radius: 5px;'>{cleaned_prompt}</div>", unsafe_allow_html=True)
+        st.markdown("""
+            <style>
+                .custom-box {
+                    background-color: #f0f0f0 !important;
+                    color: black !important;
+                    padding: 10px;
+                    border-radius: 5px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        st.markdown(f"<div class='custom-box'>{cleaned_prompt}</div>", unsafe_allow_html=True)
 
 
+
+        
     # On Submit
     if st.button("Submit") and prompt:
         word_count = len(words)
@@ -310,12 +333,31 @@ def homepage(username):
                 default_index = available_models.index(st.session_state["selected_model"])
             except ValueError:
                 default_index = 0  # fallback to first model if invalid
+            
 
             llm_model = st.selectbox(
                 "Choose a language model:",
                 available_models,
                 index=default_index
             )
+            st.markdown("""
+                <style>
+                /* Make selected option text black */
+                div[data-baseweb="select"] div[value] {
+                    color: black !important;
+                }
+                div[class*="st-emotion-cache-qiev7j"] {
+                    color: black !important;
+                }
+                div[data-baseweb="option"] {
+                    color: black !important;
+                    background-color: white !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+
+
+
 
             if llm_model != st.session_state["selected_model"]:
                 if st.session_state["tokens"] >= 5:
@@ -356,7 +398,7 @@ def homepage(username):
             """ + st.session_state["corrected_text"] + """
             </div>
             """, unsafe_allow_html=True)
-
+        
         # save file if user is logged in
         if username is not None:
             File_name = st.text_input("Input a file name:")
@@ -401,13 +443,6 @@ def homepage(username):
                  
 
 
-    if st.session_state["page"] == 'invites':
-        invites(username)
-    if st.session_state["page"] == 'invitation':
-        invitation(username)
-    if st.session_state["page"] == 'collab':
-        collab(username)
-
 
 
 # ---------------------  NO User Section  --------------------- #
@@ -415,19 +450,16 @@ def homepage(username):
 def register():
     st.title("Register Page")
 
-    account_type = st.radio("Choose account type:", ["Free", "Paid"], horizontal=True)
 
     username = st.text_input("Username", max_chars=50)
     password = ""
 
-    if account_type == "Paid":
-        password = st.text_input("Password", type="password", max_chars=50)
+    
+    password = st.text_input("Password", type="password", max_chars=50)
 
     if st.button("Register"):
         if same_username(username):
             st.error("Username already exists.")
-        elif not username or (account_type == "Paid" and not password):
-            st.error("Please fill in all required fields.")
         else:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             register_id = generate_random_id()
@@ -436,17 +468,11 @@ def register():
                 conn = sqlite3.connect("users.db")
                 cursor = conn.cursor()
 
-                if account_type == "Paid":
-                    cursor.execute(
-                        "INSERT INTO users (username, password, ID, tokens, register_date, account_approval) VALUES (?, ?, ?, ?, ?, ?)",
-                        (username, password, register_id, 0, now, 0)
-                    )
-                else:  # free account => password is NULL
-                    cursor.execute(
-                        "INSERT INTO users (username, password, ID, register_date, account_approval) VALUES (?, NULL, ?, ?, ?)",
-                        (username, register_id, now, 0)
-                    )
-
+            
+                cursor.execute(
+                    "INSERT INTO users (username, password, ID, tokens, register_date, account_approval) VALUES (?, ?, ?, ?, ?, ?)",
+                    (username, password, register_id, 0, now, 0)
+                )
                 conn.commit()
                 conn.close()
                 st.success(f"Registration successful! Your ID is '{register_id}'. Wait for approval.")
@@ -464,7 +490,7 @@ def login():
         cursor = conn.cursor()
 
         # check for paid user
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = 1", (username, password))
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
         paid_result = cursor.fetchone()
 
         # check for super user
@@ -472,7 +498,7 @@ def login():
         super_result = cursor.fetchone()
 
         # check for free user (note empty string OR NULL)
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND account_approval = 1 AND (password IS NULL OR password = '')", (username,))
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND account_approval = 1 AND paid = 0", (username,))
         free_result = cursor.fetchone()
 
         conn.close()
@@ -482,6 +508,7 @@ def login():
             st.session_state.username = username
             st.session_state.tokens = paid_result[0]
             st.session_state.paid_users = True
+            st.session_state['page'] = 'home'
 
         elif super_result:
             st.session_state.login_success = True
@@ -494,6 +521,7 @@ def login():
             st.session_state.tokens = free_result[0]
             st.session_state.paid_users = False
             st.session_state.free_user = True
+            st.session_state['page'] = 'home'
 
 
         else:
@@ -524,19 +552,59 @@ def check_register():
 
 def no_user():
     #st.title("No User Page")
-    if st.session_state["page"] == 'register':
+    st.markdown("""
+        <style>
+            button[aria-label="no_user_register_button"] {
+                background-color: #4CAF50 !important;
+                color: white !important;
+                font-size: 18px !important;
+                padding: 12px 24px !important;
+                border-radius: 8px !important;
+                font-weight: bold !important;
+            }
+
+            button[aria-label="no_user_register_button"]:hover {
+                background-color: #388e3c !important;
+                transition: 0.3s ease;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+
+    # HTML wrapper for centering
+    st.markdown('<div class="center-buttons">', unsafe_allow_html=True)
+    
+    if st.session_state['page'] == 'register':
         register()
-    if st.session_state["page"] == 'login':
+    elif st.session_state['page'] == 'login':
         login()
-    if st.session_state["page"] == 'check_register':
+    elif st.session_state['page'] == 'check_registry':
         check_register()
-    st.text("You are not currently logged in, choose one of the options above")
+    
+
 
 # --------------------- Free User Section --------------------- #
+def paid_page(username):
+    st.write("Paid at least a minimun of $1 to became a paid users")
+    amount = st.text_input("Enter your amount: ")
+    if st.button("Submit"):
+        if float(amount) >= 1.00:
+            tokens = float(100 * amount)
+            conn = sqlite3.connect("users.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET paid = 1 WHERE username = ?", (username,))
+            cursor.execute("UPDATE users SET tokens = ? WHERE username = ?", (tokens, username,))
+            conn.commit()
+            conn.close()
+            st.success("Congrats now you're a official paid users. Please login in again for your paid users features to be in function")
+        else:
+            st.error("Error: Amount can't be less than $1")
+
 def free_user():
     username = st.session_state["username"]
     # st.title("Free User Page")
-    homepage(username)
+    if st.session_state['page'] == 'home':
+        homepage(username)
     if st.session_state.get("logout") == True:
         add_logout(username)
         st.session_state["free_user"] = False
@@ -544,7 +612,8 @@ def free_user():
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
         st.rerun()
-
+    if st.session_state['page'] == 'paid_page':
+        paid_page(username)
  
 
 # --------------------- Paid User Section --------------------- #
@@ -697,7 +766,7 @@ def invitation(username):
 
 def token_purchase_modal(username):
     # modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
-    if st.session_state['page'] == "tokens":
+    if st.session_state['buy'] == True:
         st.session_state["pay_clicked"] = True
         with st.sidebar:
             st.markdown("<h1 style='color: green;'>100 Tokens = $1.00</h1>", unsafe_allow_html=True)
@@ -721,7 +790,7 @@ def token_purchase_modal(username):
 
             # close out option to buy tokens
             if st.button("Close"):
-                st.session_state["page"] = "home"
+                st.session_state["buy"] = False
                 st.rerun()
 
 def add_logout(username):
@@ -731,19 +800,71 @@ def add_logout(username):
     conn.commit()
     conn.close()
 
+def background_selector(username):
+    st.markdown("### 🎨 Select Background Theme")
+
+    # Apply text styling to selectbox
+    st.markdown("""
+        <style>
+        div[data-baseweb="select"] * {
+            color: black !important;
+            background-color: white !important;
+        }
+        ul[data-testid="stSelectboxVirtualDropdown"] li div {
+            color: black !important;
+            background-color: white !important;
+        }
+
+        </style>
+    """, unsafe_allow_html=True)
+
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM background")
+    options = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    selected = st.selectbox("Choose a theme:", options)
+
+    if st.button("Save Theme"):
+        st.session_state["background"] = selected
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET background = ? WHERE username = ?", (selected, username))
+        conn.commit()
+        conn.close()
+        st.success("Background updated! Refreshing...")
+        st.rerun()
+
+
+
+
+
 def paid_user():
     username = st.session_state["username"]
-   #tokens = st.session_state["tokens"]
-    st.sidebar.write("Token Balance:", st.session_state["tokens"])
-    homepage(username)
-    token_purchase_modal(username)
     if st.session_state.get("logout") == True:
         add_logout(username)
         st.session_state["paid_users"] = False
         st.session_state["username"] = None
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
+        st.session_state["page"] = None
         st.rerun()
+   #tokens = st.session_state["tokens"]
+    st.sidebar.write("Token Balance:", st.session_state["tokens"])
+    if st.session_state.get("paid_users"):
+        if st.session_state["buy"] == True:
+            token_purchase_modal(username)
+        if st.session_state["page"] == "home":
+            homepage(username)
+        elif st.session_state["page"] == "invitation":
+            invitation(username)
+        elif st.session_state["page"] == "invites":
+            invites(username)
+        elif st.session_state["page"] == "collab":
+            collab(username)
+        elif st.session_state["page"] == "background_color":
+            background_selector(username)
 
 # --------------------- Super User Section --------------------- #
 
@@ -1093,7 +1214,7 @@ def delete_registery(ID):
     conn.commit()
     conn.close()
 
-# GUI change - add dark mode for paid users (light mode otherwise)
+
 def apply_theme():
     if st.session_state.get("paid_users"):
         st.markdown("""
@@ -1110,7 +1231,10 @@ def apply_theme():
 
                 /* Optional: make menu background white for full contrast */
                 .stMainMenuPopover {
-                    background-color: white !important;
+                    background-color: black !important;
+                }
+                .stMarkdown {
+                    color: black !important;
                 }
             </style>
         """, unsafe_allow_html=True)
@@ -1154,6 +1278,39 @@ def apply_theme():
                 }
             </style>
         """, unsafe_allow_html=True)
+        gradient = "linear-gradient(to bottom right, #ff758c, #ff7eb3)"
+
+        try:
+            if "background" in st.session_state and st.session_state["background"]:
+                conn = sqlite3.connect('users.db')
+                cursor = conn.cursor()
+                cursor.execute("SELECT gradient FROM background WHERE name = ?", (st.session_state['background'],))
+                result = cursor.fetchone()
+                conn.close()
+
+                if result and result[0]:
+                    gradient = result[0]
+
+        except Exception as e:
+            st.error(f"Error applying background theme: {e}")
+
+        #apply the theme
+        st.markdown(f"""
+            <style>
+                html, body, .stApp {{
+                    background: {gradient} !important;
+                    background-attachment: fixed;
+                    background-size: cover;
+                    margin: 0;
+                    padding: 0;
+                }}
+
+                
+                
+            </style>
+        """, unsafe_allow_html=True)
+
+
 # --------------------- Main Execution --------------------- #
 navbar()
 apply_theme()
