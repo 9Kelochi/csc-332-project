@@ -396,29 +396,11 @@ def homepage(username):
 
     # show highlighted output
     if "corrected_text" in st.session_state:
-        
         st.markdown("""
-            <style>
-                .correction-box {
-                    background-color: #f9f9f9 !important;
-                    color: black !important;
-                    padding: 15px;
-                    border: 2px solid #ccc;
-                    border-radius: 10px;
-                    max-height: 300px;
-                    overflow-y: auto;
-                    font-size: 16px;
-                    line-height: 1.5;
-                }
-                .correction-box mark {
-                    background-color: yellow !important;
-                    color: black !important;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
-
+            <div style="border: 1px solid #ccc; padding: 10px; border-radius: 5px; background-color: #f9f9f9; max-height: 300px; overflow-y: auto;">
+            """ + st.session_state["corrected_text"] + """
+            </div>
+            """, unsafe_allow_html=True)
         
         # accept corrections
         if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
@@ -526,11 +508,8 @@ def login():
         cursor = conn.cursor()
 
         # check for paid user
-        cursor.execute("SELECT tokens, background FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
+        cursor.execute("SELECT tokens FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
         paid_result = cursor.fetchone()
-        if paid_result:
-            tokens, background = paid_result
-            
 
         # check for super user
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
@@ -545,10 +524,10 @@ def login():
         if paid_result:
             st.session_state.login_success = True
             st.session_state.username = username
-            st.session_state.tokens = tokens
+            st.session_state.tokens = paid_result[0]
             st.session_state.paid_users = True
             st.session_state['page'] = 'home'
-            st.session_state["background"] = background
+
         elif super_result:
             st.session_state.login_success = True
             st.session_state.username = username
@@ -641,7 +620,7 @@ def paid_page(username):
 
 def free_user():
     username = st.session_state["username"]
-    st.text(username)
+    complainee(username)
     # st.title("Free User Page")
     if st.session_state['page'] == 'home':
         homepage(username)
@@ -676,7 +655,7 @@ def collab(username):
             
             with st.expander(f"File ID: {file_id}", expanded=st.session_state[edit_key]):
                 if not st.session_state[edit_key]:
-                    if st.button("Edit File", key=f"edit_{file_id}"):
+                    if st.button("Edit File", key=f"edit_{file_id}--{generate_random_id}"):
                         st.session_state[edit_key] = True
                         st.rerun()
                 
@@ -697,7 +676,7 @@ def collab(username):
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            if st.button("💾 Save", key=f"save_{file_id}"):
+                            if st.button("💾 Save", key=f"save_{file_id}--{generate_random_id}"):
                                 try:
                                     conn = sqlite3.connect("users.db")
                                     cursor = conn.cursor()
@@ -715,11 +694,13 @@ def collab(username):
                                     st.error(f"Error saving file: {str(e)}")
                         
                         with col2:
-                            if st.button("❌ Cancel", key=f"cancel_{file_id}"):
+                            if st.button("❌ Cancel", key=f"cancel_{file_id}--{generate_random_id}"):
                                 st.session_state[edit_key] = False
                                 st.rerun()
                     else:
                         st.error("File not found.")
+    
+    filecomplaint(username)
 
 def invites(username):
     conn = sqlite3.connect("users.db")
@@ -736,7 +717,7 @@ def invites(username):
                 col1, col2 = st.columns(2)
                 with col1:
                     if status == "pending":
-                        if st.button("✅ Accept", key=f"accept_{invite_id}"):
+                        if st.button("✅ Accept", key=f"accept_{invite_id}--{generate_random_id}"):
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE invitations SET status = ?, accept_at = ? WHERE invite_id = ?", ("accepted", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), invite_id))
@@ -747,7 +728,7 @@ def invites(username):
                             st.rerun()
 
                 with col2:
-                    if st.button("❌ Decline", key=f"decline_{invite_id}"):
+                    if st.button("❌ Decline", key=f"decline_{invite_id}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("UPDATE invitations SET status = ? WHERE invite_id = ?", ("declined", invite_id))
@@ -804,27 +785,82 @@ def invitation(username):
         else:
             st.error("File not found or not owned by you.")
 
-def complainfiledagainst(username): 
+def complainee(username): 
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     
-    cursor.execute("SELECT complainAbout, reasonByComplainer FROM complaints WHERE complainAbout = ? AND status = 0 AND defenseByComplainee = NULL", (username,))
-    result = cursor.fetchone()
+    cursor.execute("""
+                   SELECT complaintID, complainAbout, reasonByComplainer
+                   FROM complaints 
+                   left outer join users
+                   on complaints.complainAbout = users.ID
+                   WHERE users.username = ? 
+                   AND status = 0 
+                   AND defenseByComplainee is NULL
+                   """, (username,))
     
+    result = cursor.fetchall()
     conn.close()
 
     if result:
         st.header("A complaint has been filed against you:")
-        st.info(result[1])  # result[1] is reasonByComplainer
         
-        prompt = st.text_area("Enter your defense (response):", height=300)
+        for rowid, user, reason in result:
+            st.info(f"Complaint: {reason}")
 
-        if st.button("Submit") and prompt: 
+            response_key = f"response_{rowid}"
+            response = st.text_area(f"Enter your defense {user} (response):", height=250, key=response_key)
+
+            if st.button(f"Submit response to complaint {rowid}"):
+                conn = sqlite3.connect('users.db')
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE complaints 
+                    SET defenseByComplainee = ? 
+                    WHERE rowid = ?
+                """, (response, rowid))
+                conn.commit()
+                conn.close()
+                st.success(f"Your response to complaint {rowid} has been submitted.")
+
+def filecomplaint(username):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT file_collaborations.collaborator_id, users.username 
+        FROM file_collaborations 
+        INNER JOIN users ON file_collaborations.collaborator_id = users.ID 
+        WHERE file_collaborations.owner_id = (
+            SELECT ID FROM users WHERE username = ?
+        )
+    """, (username,))
+    
+    collaborators = cursor.fetchall()
+    conn.close()
+
+    if collaborators:
+        st.subheader("File a complaint against a collaborator:")
+        collaborator_options = {name: cid for cid, name in collaborators}
+        selected_username = st.selectbox("Choose collaborator:", list(collaborator_options.keys()))
+        selected_id = collaborator_options[selected_username]
+
+        prompt = st.text_area("Enter your reasoning:", height=300)
+
+        if st.button("Submit") and prompt:
+            complaint_id = generate_random_id()
+            
             conn = sqlite3.connect('users.db')
             cursor = conn.cursor()
-            cursor.execute("UPDATE complaints SET defenseByComplainee = ? WHERE complainAbout = ?", (prompt, username))
+            cursor.execute("""
+                INSERT INTO complaints VALUES (?, ?, ?, ?, NULL, NULL, 0, NULL, NULL, 0)
+            """, (complaint_id, username, selected_id, prompt))
+            
             conn.commit()
             conn.close()
+            st.success("Complaint submitted successfully.")
+    else:
+        st.warning("You have no collaborators to file a complaint against.")
 
 def token_purchase_modal(username):
     # modal = Modal("Pay Token", key="demo-modal", padding=20, max_width=600)
@@ -904,7 +940,7 @@ def background_selector(username):
 
 def paid_user():
     username = st.session_state["username"]
-    complainfiledagainst(username)
+    complainee(username)
     if st.session_state.get("logout") == True:
         add_logout(username)
         st.session_state["paid_users"] = False
@@ -932,7 +968,7 @@ def paid_user():
 # --------------------- Super User Section --------------------- #
 
 # PAGES 
-def super_home():    # this sucks. I need to fix
+def super_home(): 
     conn = sqlite3.connect("users.db")
     cursor1 = conn.cursor()
     cursor1.execute("SELECT COUNT(word) FROM blacklist_requests WHERE status = 'PENDING'")
@@ -972,7 +1008,7 @@ def approval_page():
             with st.expander(f"User: {row[0]} | ID: {register_id} | Status: Waiting for Approval"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Approve", key=f"approve_{register_id}"):
+                    if st.button("✅ Approve", key=f"approve_{register_id}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("UPDATE users SET account_approval = 1 WHERE ID = ?", (register_id,))
@@ -982,7 +1018,7 @@ def approval_page():
                         registry_approval(row[0])
                         st.rerun()
                 with col2:
-                    if st.button("❌ Reject", key=f"reject_{register_id}"):
+                    if st.button("❌ Reject", key=f"reject_{register_id}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM users WHERE register_id = ?", (register_id,))
@@ -1010,7 +1046,7 @@ def accept_paid():
             with st.expander(f"User: {row[0]} | ID: {applicationID} | Status: Waiting Upgrade Approval"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Accept", key=f"accept_{applicationID}"):
+                    if st.button("✅ Accept", key=f"accept_{applicationID}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("UPDATE pending_users SET status = 1 WHERE applicationID = ?", (applicationID,))
@@ -1021,7 +1057,7 @@ def accept_paid():
                         registry_approval(row[0])
                         st.rerun()
                 with col2:
-                    if st.button("❌ Decline", key=f"decline_{applicationID}"):
+                    if st.button("❌ Decline", key=f"decline_{applicationID}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM pending_users WHERE applicationID = ?", (applicationID,))
@@ -1034,7 +1070,7 @@ def accept_paid():
 
 
 
-def complaints(): # can shorten code? improve k-complexity (action for final revisions)
+def complaints(): 
     st.header("Complaints Log")
 
     complaints_log_mode = st.radio("Display Complaints:", ["Pending", "Resolved"], horizontal=True)
@@ -1066,7 +1102,7 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                         st.info(defense)
                     
                     with col4:
-                        if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
+                        if st.button("Complainee", key=f"punish_{complainAbout}--{generate_random_id}"): # punish the person that the complain was filed against 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", complaintID))
@@ -1078,7 +1114,7 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                             ## take away tokens from the punished user 
 
                     with col5:
-                        if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
+                        if st.button("Complainer",  key=f"punish_{submittedBy}--{generate_random_id}"): # punish the person who filed the complained 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINER punished", complaintID))
@@ -1120,7 +1156,7 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                         st.info(defense)
                     
                     with col4:
-                        if st.button("Complainee", key=f"punish_{complainAbout}"): # punish the person that the complain was filed against 
+                        if st.button("Complainee", key=f"punish_{complainAbout}--{generate_random_id}"): # punish the person that the complain was filed against 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", complaintID))
@@ -1132,7 +1168,7 @@ def complaints(): # can shorten code? improve k-complexity (action for final rev
                             ## take away tokens from the punished user 
 
                     with col5:
-                        if st.button("Complainer",  key=f"punish_{submittedBy}"): # punish the person who filed the complained 
+                        if st.button("Complainer",  key=f"punish_{submittedBy}--{generate_random_id}"): # punish the person who filed the complained 
                             conn = sqlite3.connect("token_terminator.db") #("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINER punished", complaintID))
@@ -1175,7 +1211,7 @@ def blacklist():
                     st.info(word) 
 
                 with col2:
-                    if st.button("DELETE", key=f"delete_{word}"):
+                    if st.button("DELETE", key=f"delete_{word}--{generate_random_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM blacklisted_words WHERE word = ?", [word])
@@ -1204,7 +1240,7 @@ def blacklist():
                     st.info(word) 
 
                 with col2:
-                    if st.button("ADD", key=f"paidadded_{word}") and word: 
+                    if st.button("ADD", key=f"paidadded_{word}--{generate_random_id}") and word: 
                         conn = sqlite3.connect("token_terminator.db")  #("users.db")
                         cursor = conn.cursor()
                         cursor.execute("INSERT INTO blacklisted_words (word) VALUES (?)", [word])
@@ -1220,7 +1256,7 @@ def blacklist():
     new_word = st.text_area("Enter a new word:", height=68, max_chars = 255).lower() 
     does_exist = False 
     # check if word already exist in the blacklist table to prevent error of violating UNIQUE condition 
-    if st.button("Add Word",  key=f"superadded_{new_word}") and new_word: 
+    if st.button("Add Word",  key=f"superadded_{new_word}--{generate_random_id}") and new_word: 
         if results: 
             for row in results:
                 if new_word == row[0]:
@@ -1266,11 +1302,11 @@ def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Accept Rejection", key=f"accept_{rejection_id}"):
+                    if st.button("✅ Accept Rejection", key=f"accept_{rejection_id}--{generate_random_id}"):
                         apply_llm_rejection_decision(rejection_id, username, penalty=1, decision="accepted")
 
                 with col2:
-                    if st.button("❌ Reject Rejection", key=f"reject_{rejection_id}"):
+                    if st.button("❌ Reject Rejection", key=f"reject_{rejection_id}--{generate_random_id}"):
                         apply_llm_rejection_decision(rejection_id, username, penalty=5, decision="rejected")
 
     else:
