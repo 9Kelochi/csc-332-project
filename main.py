@@ -7,6 +7,7 @@ import time
 import random
 import string
 import difflib
+from streamlit_extras.stylable_container import stylable_container
 
 # --------------------- Session State & Navigation --------------------- #
 def init_session_state():
@@ -363,14 +364,15 @@ def homepage(username):
 
 
             if llm_model != st.session_state["selected_model"]:
-                if st.session_state["tokens"] >= 5:
-                    st.session_state["tokens"] -= 5
-                    st.session_state["selected_model"] = llm_model
-                    st.info(f"Switched LLM to {llm_model}. Charged 5 tokens.")
-                    st.rerun()  # reset
-                else:
-                    st.error("Not enough tokens to switch models.")
-                    return
+                if st.button("Select Model"):
+                    if st.session_state["tokens"] >= 5:
+                        st.session_state["tokens"] -= 5
+                        st.session_state["selected_model"] = llm_model
+                        st.info(f"Switched LLM to {llm_model}. Charged 5 tokens.")
+                        st.rerun()  # Refresh with updated model
+                    else:
+                        st.error("Not enough tokens to switch models.")
+                        return
         else:
             llm_model = "mistral"
             st.info("Free accounts use the default LLM: mistral.")
@@ -385,8 +387,9 @@ def homepage(username):
             f"Words to NOT correct: {formatted_dict_words} \n\n"
             f"{cleaned_prompt}"
         )
-        response = ollama.generate(model=llm_model, prompt=instruction)
-        response = response.get("response", "[No 'response' field found]")
+        with st.spinner("🧠 LLM is thinking..."):
+            response = ollama.generate(model=llm_model, prompt=instruction)
+            response = response.get("response", "[No 'response' field found]")
 
         no_diff = word_difference(cleaned_prompt, response, username)
 
@@ -431,7 +434,21 @@ def homepage(username):
          
         # save file if user is logged in
         if username is not None:
-            File_name = st.text_input("Input a file name:")
+            with stylable_container(
+                key="custom_input_container",
+                css_styles="""
+                    input[type="text"] {
+                        color: black !important;
+                        background-color: white !important;
+                        border: 1px solid #ccc !important;
+                    }
+
+                    label {
+                        color: black !important;
+                    }
+                """
+            ):
+                File_name = st.text_input("Input a file name:", key="file_input_key")
             if st.button("Save File") and File_name:
                 conn = sqlite3.connect('users.db')
                 cursor = conn.cursor()
@@ -470,12 +487,14 @@ def homepage(username):
                 conn.commit()
                 conn.close()
 
+
                 # clear diff count so it can't get applied accidentally later
                 if "llm_diff_count" in st.session_state:
                     del st.session_state["llm_diff_count"]
                 st.success("Your rejection has been submitted for review.")
+                time.sleep(1.5)
                 st.rerun()
-                 
+                                
 
 
 
@@ -1513,4 +1532,3 @@ elif st.session_state.get("free_user"):
 else:
     no_user()
     
-
