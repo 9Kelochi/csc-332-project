@@ -42,7 +42,7 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(9)
+        cols = st.columns(10)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
@@ -74,8 +74,13 @@ def navbar():
             if st.button("🌈 Background", key="nav_background_color"):
                 st.session_state["page"] = "background_color" 
         with cols[8]:
+            if st.button("📬 My Rejections", key="nav_my_rejections"):
+                st.session_state["page"] = "my_rejections"
+                st.rerun()
+        with cols[9]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
+
         
                 
     elif st.session_state.get("super_users"):
@@ -188,43 +193,6 @@ def token_add_minus(username, token):
     conn.close()
     st.session_state["tokens"] = updated_tokens
 
-
-def submit_blacklist_request(username):
-    st.subheader("🛑 Submit a Word to be Blacklisted")
-    word_to_block = st.text_input("Enter a word you want added to the blacklist:")
-
-    if st.button("Submit Blacklist Request"):
-        if not word_to_block.strip():
-            st.warning("Please enter a valid word.")
-            return
-
-        word_to_block = word_to_block.lower().strip()
-
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-
-        # check if word already in blacklisted_words
-        cursor.execute("SELECT word FROM blacklisted_words WHERE word = ?", (word_to_block,))
-        if cursor.fetchone():
-            st.info("That word is already blacklisted.")
-            conn.close()
-            return
-
-        # check if already requested
-        cursor.execute("SELECT word FROM blacklist_requests WHERE word = ?", (word_to_block,))
-        if cursor.fetchone():
-            st.info("That word is already in the request queue.")
-            conn.close()
-            return
-
-        # insert request
-        cursor.execute("""
-            INSERT INTO blacklist_requests (word, requestedBy, status)
-            VALUES (?, ?, ?)
-        """, (word_to_block, username, "PENDING"))
-        conn.commit()
-        conn.close()
-        st.success("Blacklist request submitted!")
 
 
 def submit_blacklist_request(username):
@@ -403,8 +371,6 @@ def homepage(username):
             st.session_state["tokens"] -= penalty
             st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
             return
-        else:
-            st.session_state["tokens"] -= word_count
 
         # check for enough tokens for blacklisted words for paid users
         if st.session_state["tokens"] < blacklist_token_cost and username is not None:
@@ -1074,6 +1040,35 @@ def background_selector(username):
         st.rerun()
 
 
+def view_my_rejections(username):
+    st.header("My LLM Rejections")
+
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT rejection_id, original_text, corrected_text, reason, status, reviewed_at
+        FROM llm_rejections
+        WHERE username = ?
+        ORDER BY reviewed_at DESC NULLS LAST
+    """, (username,))
+    
+    results = cursor.fetchall()
+    conn.close()
+
+    if results:
+        for rejection_id, original, corrected, reason, status, reviewed_at in results:
+            with st.expander(f"Rejection ID: {rejection_id[:6]}... | Status: {status.upper()}"):
+                st.subheader("Original Text")
+                st.code(original, language="text")
+                st.subheader("LLM Correction")
+                st.markdown(corrected, unsafe_allow_html=True)
+                st.subheader("Your Reason")
+                st.info(reason)
+                if reviewed_at:
+                    st.caption(f"Reviewed at: {reviewed_at}")
+    else:
+        st.info("You haven't submitted any LLM rejection yet.")
 
 
 
@@ -1105,6 +1100,9 @@ def paid_user():
             collab(username)
         elif st.session_state["page"] == "background_color":
             background_selector(username)
+        elif st.session_state["page"] == "my_rejections":
+            view_my_rejections(username)
+
 
 # --------------------- Super User Section --------------------- #
 
@@ -1438,11 +1436,11 @@ def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Accept Rejection", key=f"accept_{rejection_id}--{generate_random_id}"):
+                    if st.button("✅ Accept Rejection", key=f"accept_{rejection_id}"):
                         apply_llm_rejection_decision(rejection_id, username, penalty=1, decision="accepted")
 
                 with col2:
-                    if st.button("❌ Reject Rejection", key=f"reject_{rejection_id}--{generate_random_id}"):
+                    if st.button("❌ Reject Rejection", key=f"reject_{rejection_id}"):
                         apply_llm_rejection_decision(rejection_id, username, penalty=5, decision="rejected")
 
     else:
