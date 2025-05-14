@@ -770,6 +770,8 @@ def free_user():
         st.rerun()
     if st.session_state['page'] == 'paid_page':
         paid_page(username)
+    elif st.session_state["page"] == "blacklist":
+        submit_blacklist_request(st.session_state["username"])
  
 
 # --------------------- Paid User Section --------------------- #
@@ -1147,7 +1149,7 @@ def approval_page():
             with st.expander(f"User: {row[0]} | ID: {register_id} | Status: Waiting for Approval"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Approve", key=f"approve_{register_id}--{generate_random_id}"):
+                    if st.button("✅ Approve", key=f"approve_{register_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("UPDATE users SET account_approval = 1 WHERE ID = ?", (register_id,))
@@ -1157,7 +1159,7 @@ def approval_page():
                         registry_approval(row[0])
                         st.rerun()
                 with col2:
-                    if st.button("❌ Reject", key=f"reject_{register_id}--{generate_random_id}"):
+                    if st.button("❌ Reject", key=f"reject_{register_id}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM users WHERE register_id = ?", (register_id,))
