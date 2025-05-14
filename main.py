@@ -42,36 +42,41 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(8)
+        cols = st.columns(9)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
                 st.rerun()
-        with cols[1]:
+        with cols[1]:  # adjust the column index as needed
+            if st.button("🚫 Blacklist", key="nav_blacklist"):
+                st.session_state["page"] = "blacklist"
+                st.rerun()
+        with cols[2]:
             if st.button("✉️ Invitation", key="nav_invitation_paid"):
                 st.session_state["page"] = "invitation"
                 st.rerun()
-        with cols[2]:
+        with cols[3]:
             if st.button("📨 Invites", key="nav_invites_paid"):
                 st.session_state["page"] = "invites"
                 st.rerun()
-        with cols[3]:
+        with cols[4]:
             if st.button("🤝 Collab", key="nav_collab_paid"):
                 st.session_state["page"] = "collab"
                 st.rerun()
-        with cols[4]:
+        with cols[5]:
             if st.button("📂 Files Saved", key="nav_files_paid"):
                 st.session_state["page"] = "files_saved"
-        with cols[5]:
+        with cols[6]:
             if st.button("💰 Buy Tokens", key="nav_tokens_paid"):
                 st.session_state["buy"] = True
                 st.rerun()
-        with cols[6]:
+        with cols[7]:
             if st.button("🌈 Background", key="nav_background_color"):
                 st.session_state["page"] = "background_color" 
-        with cols[7]:
+        with cols[8]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
+        
                 
     elif st.session_state.get("super_users"):
         cols = st.columns(7)
@@ -105,15 +110,19 @@ def navbar():
 
     elif st.session_state.get("free_user"):
         # Free User Navbar
-        cols = st.columns(3) # was 4 
+        cols = st.columns(4) # was 4 
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_free"):
                 st.session_state["page"] = "home"
                 st.rerun()
-        with cols[1]:
+        with cols[1]:  # adjust the column index as needed
+            if st.button("🚫 Blacklist", key="nav_blacklist"):
+                st.session_state["page"] = "blacklist"
+                st.rerun()
+        with cols[2]:
             if st.button("🚪 Logout", key="nav_login_free"):
                 st.session_state["logout"] = True
-        with cols[2]:
+        with cols[3]:
             if st.button("💵 Became Paid Users"):
                 st.session_state["page"] = "paid_page"
 
@@ -178,6 +187,99 @@ def token_add_minus(username, token):
     conn.commit()
     conn.close()
     st.session_state["tokens"] = updated_tokens
+
+
+def submit_blacklist_request(username):
+    st.subheader("🛑 Submit a Word to be Blacklisted")
+    word_to_block = st.text_input("Enter a word you want added to the blacklist:")
+
+    if st.button("Submit Blacklist Request"):
+        if not word_to_block.strip():
+            st.warning("Please enter a valid word.")
+            return
+
+        word_to_block = word_to_block.lower().strip()
+
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+
+        # check if word already in blacklisted_words
+        cursor.execute("SELECT word FROM blacklisted_words WHERE word = ?", (word_to_block,))
+        if cursor.fetchone():
+            st.info("That word is already blacklisted.")
+            conn.close()
+            return
+
+        # check if already requested
+        cursor.execute("SELECT word FROM blacklist_requests WHERE word = ?", (word_to_block,))
+        if cursor.fetchone():
+            st.info("That word is already in the request queue.")
+            conn.close()
+            return
+
+        # insert request
+        cursor.execute("""
+            INSERT INTO blacklist_requests (word, requestedBy, status)
+            VALUES (?, ?, ?)
+        """, (word_to_block, username, "PENDING"))
+        conn.commit()
+        conn.close()
+        st.success("Blacklist request submitted!")
+
+
+def submit_blacklist_request(username):
+    st.subheader("🛑 Submit a Word to be Blacklisted")
+    word_to_block = st.text_input("Enter a word you want added to the blacklist:")
+
+    if st.button("Submit Blacklist Request"):
+        if not word_to_block.strip():
+            st.warning("Please enter a valid word.")
+            return
+
+        word_to_block = word_to_block.lower().strip()
+
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+
+        # check if word already blacklisted
+        cursor.execute("SELECT word FROM blacklisted_words WHERE word = ?", (word_to_block,))
+        if cursor.fetchone():
+            st.info("That word is already blacklisted.")
+            conn.close()
+            return
+
+        # check if already requested
+        cursor.execute("SELECT word FROM blacklist_requests WHERE word = ?", (word_to_block,))
+        if cursor.fetchone():
+            st.info("That word is already in the request queue.")
+            conn.close()
+            return
+
+        # insert new request
+        cursor.execute("""
+            INSERT INTO blacklist_requests (word, requestedBy, status)
+            VALUES (?, ?, ?)
+        """, (word_to_block, username, "PENDING"))
+        conn.commit()
+        conn.close()
+        st.success("Blacklist request submitted!")
+
+    # show user's past requests
+    st.subheader("📄 Your Blacklist Requests")
+
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT word, status FROM blacklist_requests WHERE requestedBy = ?", (username,))
+    requests = cursor.fetchall()
+    conn.close()
+
+    if requests:
+        for word, status in requests:
+            st.markdown(f"- **{word}** → `{status}`")
+    else:
+        st.info("You haven't submitted any blacklist requests yet.")
+
+
 
 def word_difference(original, edited, username, user_dict_words=None):
     if user_dict_words is None:
@@ -281,7 +383,6 @@ def homepage(username):
             </style>
         """, unsafe_allow_html=True)
         st.markdown(f"<div class='custom-box'>{cleaned_prompt}</div>", unsafe_allow_html=True)
-
 
 
         
@@ -992,6 +1093,8 @@ def paid_user():
             token_purchase_modal(username)
         if st.session_state["page"] == "home":
             homepage(username)
+        elif st.session_state["page"] == "blacklist":
+            submit_blacklist_request(st.session_state["username"])
         elif st.session_state["page"] == "invitation":
             invitation(username)
         elif st.session_state["page"] == "invites":
@@ -1230,77 +1333,74 @@ def complaints():
 
 def blacklist(): 
     st.header("Edit Blacklist")
-    
-    #### CURRENT BLACKLIST; OPTIONS TO DELETE WORDS 
+
+    #### CURRENT BLACKLIST — OPTIONS TO DELETE WORDS 
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("SELECT word FROM blacklisted_words ORDER BY word ASC") 
     results = cursor.fetchall()
     conn.close()
 
-    with st.expander("blacklist:", expanded=True):
+    with st.expander("Current Blacklist:", expanded=True):
         if results:
             for row in results:
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns([3, 1])
+                word = row[0]
                 with col1:
-                    word = row[0]
                     st.info(word) 
-
                 with col2:
-                    if st.button("DELETE", key=f"delete_{word}--{generate_random_id}"):
+                    if st.button("❌ DELETE", key=f"delete_{word}_{generate_random_id()}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM blacklisted_words WHERE word = ?", [word])
                         conn.commit()
                         conn.close()
-                        st.success(f"deleted: {word}")
+                        st.success(f"Deleted: {word}")
                         st.rerun()
-                    
         else:
-            st.info("No Words in Blacklist.")
+            st.info("Blacklist is empty.")
 
-
-    #### WORDS REQUESTED TO BE ADDED TO BLACKLIST BY PAID USERS 
-    conn = sqlite3.connect("token_terminator.db")  #("users.db")
+    #### PENDING USER REQUESTS TO ADD WORDS TO BLACKLIST 
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT word FROM blacklist_requests ORDER BY word ASC") 
-    result2 = cursor.fetchall()
+    cursor.execute("SELECT word, requestedBy FROM blacklist_requests WHERE status = 'PENDING' ORDER BY word ASC") 
+    pending_requests = cursor.fetchall()
     conn.close()
 
-    with st.expander("paid user's black list requests:", expanded=True):
-        if result2:
-            for row in result2:
-                col1, col2 = st.columns(2)
+    with st.expander("Pending Blacklist Requests from Users:", expanded=True):
+        if pending_requests:
+            for word, user in pending_requests:
+                col1, col2, col3 = st.columns([3, 1, 1])
                 with col1:
-                    word = row[0]
-                    st.info(word) 
-
+                    st.info(f"'{word}' requested by **{user}**")
                 with col2:
-                    if st.button("ADD", key=f"paidadded_{word}--{generate_random_id}") and word: 
-                        conn = sqlite3.connect("token_terminator.db")  #("users.db")
+                    if st.button("✅ Accept", key=f"accept_{word}"):
+                        conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
-                        cursor.execute("INSERT INTO blacklisted_words (word) VALUES (?)", [word])
+                        cursor.execute("INSERT OR IGNORE INTO blacklisted_words (word) VALUES (?)", (word,))
+                        cursor.execute("UPDATE blacklist_requests SET status = 'APPROVED' WHERE word = ?", (word,))
                         conn.commit()
                         conn.close()
-                        st.success(f"added: {word}")
+                        st.success(f"'{word}' approved and added to blacklist.")
+                        st.rerun()
+                with col3:
+                    if st.button("❌ Deny", key=f"deny_{word}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE blacklist_requests SET status = 'DENIED' WHERE word = ?", (word,))
+                        conn.commit()
+                        conn.close()
+                        st.warning(f"'{word}' was denied.")
                         st.rerun()
         else:
-            st.info("No Requested Words to be added to Blacklist")
+            st.info("No pending blacklist requests.")
 
-
-    #### SUPER MANUALLY ADDING NEW WORDS TO BLACKLIST 
-    new_word = st.text_area("Enter a new word:", height=68, max_chars = 255).lower() 
-    does_exist = False 
-    # check if word already exist in the blacklist table to prevent error of violating UNIQUE condition 
-    if st.button("Add Word",  key=f"superadded_{new_word}--{generate_random_id}") and new_word: 
-        if results: 
-            for row in results:
-                if new_word == row[0]:
-                    does_exist = True
-
-        if does_exist == True: 
-            st.warning('This word already exists in the Blacklist') 
-        elif does_exist == False:
+    #### SUPERUSER MANUALLY ADDING NEW WORDS TO BLACKLIST 
+    new_word = st.text_area("🆕 Manually add a new word to blacklist:", height=68, max_chars=255).lower() 
+    if st.button("Add Word", key=f"manualadd_{new_word}_{generate_random_id()}") and new_word:
+        if any(new_word == row[0] for row in results):
+            st.warning("This word already exists in the blacklist.")
+        else:
             conn = sqlite3.connect("users.db")
             cursor = conn.cursor()
             cursor.execute("INSERT INTO blacklisted_words (word) VALUES (?);", [new_word])
@@ -1308,8 +1408,6 @@ def blacklist():
             conn.close()
             st.success(f"Successfully added word: {new_word}")
             st.rerun()
-        else:
-            st.warning('This should never appear') 
 
 # Rejection Review Panel
 def llm_rejections_review(): # REQUIRES AN ADJUSTMENT TO THE DB TO RESOLVE 
