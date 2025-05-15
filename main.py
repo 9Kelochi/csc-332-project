@@ -459,6 +459,8 @@ def homepage(username, userID):
             st.session_state["tokens"] -= penalty
             st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
             return
+        else:
+            st.session_state["tokens"] -= word_count 
 
         # check for enough tokens for blacklisted words for paid users
         if st.session_state["tokens"] < blacklist_token_cost and paiduser == 1:
