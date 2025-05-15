@@ -290,7 +290,7 @@ def trigger_lockout(now):
     st.rerun()
 
 # --------------------- Homepage Section --------------------- #
-def homepage(username):
+def homepage(username, userID):
     st.title("The Token Terminator")
     now = datetime.now()
 
@@ -417,21 +417,31 @@ def homepage(username):
         word_count = len(words)
         user_tokens = st.session_state["tokens"]
 
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT paid FROM users WHERE ID = ?", (userID,))
+        result = cursor.fetchone()
+        if result:
+            paiduserr = result[0]
+            paiduser = int(paiduserr)
+        conn.commit()
+        conn.close()
+        
         # check free user token limit
-        if username is None and word_count > 20:
+        if paiduser == 0 and word_count > 20:
             st.error("Text length exceeds limit for free users.")
             trigger_lockout(now)
             return
 
         # check for enough tokens for paid users
-        if user_tokens < word_count and username is not None:
+        if user_tokens < word_count and paiduser == 1:
             penalty = user_tokens // 2
             st.session_state["tokens"] -= penalty
             st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
             return
 
         # check for enough tokens for blacklisted words for paid users
-        if st.session_state["tokens"] < blacklist_token_cost and username is not None:
+        if st.session_state["tokens"] < blacklist_token_cost and paiduser == 1:
             st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
             return
         else:
@@ -440,7 +450,7 @@ def homepage(username):
         # self correction option
         if correction_mode == "Self-Correction":
             token_cost = word_count // 2
-            if st.session_state["tokens"] < token_cost and username is not None:
+            if st.session_state["tokens"] < token_cost and paiduser == 1:
                 st.error(f"Not enough tokens for self-correction (need {token_cost}).")
                 return
             st.session_state["tokens"] -= token_cost
@@ -536,7 +546,7 @@ def homepage(username):
                     token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
                     st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
                     del st.session_state["llm_diff_count"]
-                    st.rerun()
+                    st.rerun()  
 
             
             # save file if user is logged in
@@ -555,20 +565,19 @@ def homepage(username):
                         }
                     """
                 ):
-                    File_name = st.text_input("Input a file name:", key="file_input_key")
+                    File_name = st.text_input("Input a file name:", key=f"file_input_key {generate_random_id()}")
                 if st.button("Save File") and File_name:
+                    save_id = generate_random_id()
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     conn = sqlite3.connect('users.db')
                     cursor = conn.cursor()
-                    save_id = generate_random_id()
-                    cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
-                    result = cursor.fetchone()
-                    ID = result[0]
                     cursor.execute(
                         "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
-                        (save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
+                        (save_id, userID, File_name, st.session_state["original_text"], now, username,))
                     conn.commit()
                     conn.close()
                     st.success("Save complete")
+
 
             # Reject LLM correction 
             if username is not None and st.session_state["corrected_text"] != st.session_state["original_text"]:
@@ -767,10 +776,11 @@ def paid_page(username):
 
 def free_user():
     username = st.session_state["username"]
+    userID = st.session_state["userID"]
     complainee(username)
     # st.title("Free User Page")
     if st.session_state['page'] == 'home':
-        homepage(username)
+        homepage(username, userID)
     if st.session_state.get("logout") == True:
         add_logout(username)
         st.session_state["free_user"] = False
@@ -1144,7 +1154,7 @@ def paid_user():
         if st.session_state["buy"] == True:
             token_purchase_modal(username)
         if st.session_state["page"] == "home":
-            homepage(username)
+            homepage(username, userID)
         elif st.session_state["page"] == "blacklist":
             submit_blacklist_request(st.session_state["username"])
         elif st.session_state["page"] == "invitation":
@@ -1397,7 +1407,7 @@ def blacklist():
                 with col1:
                     st.info(word) 
                 with col2:
-                    if st.button("❌ DELETE", key=f"delete_{word}_{generate_random_id()}"):
+                    if st.button("❌ DELETE", key=f"delete_{word}"):
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM blacklisted_words WHERE word = ?", [word])
