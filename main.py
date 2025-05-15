@@ -7,7 +7,6 @@ import time
 import random
 import string
 import difflib
-import datetime
 from streamlit_extras.stylable_container import stylable_container
 
 # --------------------- Session State & Navigation --------------------- #
@@ -16,6 +15,7 @@ def init_session_state():
         "self_edit": False,
         "paid_users": False,
         "username": None,
+        "userID": None,
         "tokens": 0,
         "pay_clicked": False,
         "confirm_clicked": False,
@@ -610,24 +610,27 @@ def login():
         cursor = conn.cursor()
 
         # check for paid user
-        cursor.execute("SELECT tokens, background FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
+        cursor.execute("SELECT ID, tokens, background FROM users WHERE username = ? AND password = ? AND account_approval = 1 AND paid = 1", (username, password))
         paid_result = cursor.fetchone()
         if paid_result:
-            tokens, background = paid_result
+            eID, tokens, background = paid_result
 
         # check for super user
         cursor.execute("SELECT * FROM super_users WHERE username = ? AND password = ?", (username, password))
         super_result = cursor.fetchone()
 
         # check for free user (note empty string OR NULL)
-        cursor.execute("SELECT tokens FROM users WHERE username = ? AND account_approval = 1 AND paid = 0", (username,))
+        cursor.execute("SELECT ID, tokens FROM users WHERE username = ? AND account_approval = 1 AND paid = 0", (username,))
         free_result = cursor.fetchone()
+        if free_result:
+            eID, tokens = free_result
 
         conn.close()
 
         if paid_result:
             st.session_state.login_success = True
             st.session_state.username = username
+            st.session_state.userID = eID
             st.session_state.tokens = tokens
             st.session_state.paid_users = True
             st.session_state['page'] = 'home'
@@ -641,7 +644,8 @@ def login():
         elif free_result:
             st.session_state.login_success = True
             st.session_state.username = username
-            st.session_state.tokens = free_result[0]
+            st.session_state.userID = eID
+            st.session_state.tokens = tokens
             st.session_state.paid_users = False
             st.session_state.free_user = True
             st.session_state['page'] = 'home'
@@ -733,6 +737,7 @@ def free_user():
         add_logout(username)
         st.session_state["free_user"] = False
         st.session_state["username"] = None
+        st.session_state["userID"] = None
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
         st.rerun()
@@ -1089,6 +1094,7 @@ def paid_user():
         add_logout(username)
         st.session_state["paid_users"] = False
         st.session_state["username"] = None
+        st.session_state["userID"] = None
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
         st.session_state["page"] = None
@@ -1256,10 +1262,10 @@ def complaints():
                     
                     with col5:
                         if st.button("Complainee", key=f"punish_{complainAbout}--for: {complaintID}"): # punish the person that the complain was filed against 
-                            now = datetime.datetime.now()   
+                            approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", prompt, username, now, complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", prompt, username, approved_Date, complaintID))
                             # cursor.execute("SELECT ID, tokens FROM users WHERE ID = ?", submittedBy) 
                             # cursor.execute("UPDATE users SET tokens = ? WHERE ID = ?", ())
                             conn.commit()
@@ -1270,9 +1276,10 @@ def complaints():
 
                     with col6:
                         if st.button("Complainer",  key=f"punish_{submittedBy}--for: {complaintID}"): # punish the person who filed the complained 
+                            approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
-                            cursor.execute("UPDATE complaints SET status = ?, decision = ? WHERE complaintID = ?", (1, "COMPLAINER punished", complaintID))
+                            cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINER punished", prompt, username, approved_Date, complaintID))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
@@ -1485,6 +1492,7 @@ def super_user():
         add_logout(username)
         st.session_state["super_users"] = False
         st.session_state["username"] = None
+        st.session_state["userID"] = None
         st.session_state["tokens"] = 0
         st.session_state["logout"] = False
         st.rerun()
@@ -1492,12 +1500,12 @@ def super_user():
 
 # FUNCTIONS 
 def registry_approval(username):
-    now = datetime.now()
+    approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by = ? WHERE username = ?",
-        (1, now, 0, username, st.session_state["username"])
+        (1, approved_Date, 0, username, st.session_state["username"])
     )
     conn.commit()
     conn.close()
