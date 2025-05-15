@@ -12,6 +12,7 @@ from streamlit_extras.stylable_container import stylable_container
 # --------------------- Session State & Navigation --------------------- #
 def init_session_state():
     defaults = {
+        "mustdefendcomplaint": True,
         "submitted": None,
         "self_edit": False,
         "paid_users": False,
@@ -929,7 +930,7 @@ def free_user():
     userID = st.session_state["userID"]
     complainee(username)
     # st.title("Free User Page")
-    if st.session_state['page'] == 'home':
+    if st.session_state['page'] == 'home' and st.session_state["mustdefendcomplaint"] == False:
         homepage(username, userID)
     if st.session_state.get("logout") == True:
         add_logout(username)
@@ -1154,6 +1155,7 @@ def complainee(username):
     conn.close()
 
     if result:
+        st.session_state["mustdefendcomplaint"] = True
         st.header("A complaint has been filed against you:")
         
         for rowid, user, reason in result:
@@ -1177,7 +1179,10 @@ def complainee(username):
                 
                 st.session_state.responded_complaints.add(rowid) 
                 st.success(f"Your response to complaint {rowid} has been submitted.")
+                st.session_state["mustdefendcomplaint"] = False
                 st.rerun() 
+    else:
+        st.session_state["mustdefendcomplaint"] = False
                 
 def filecomplaint(userID):
     conn = sqlite3.connect('users.db')
@@ -1405,7 +1410,7 @@ def paid_user():
     if st.session_state.get("paid_users"):
         if st.session_state["buy"] == True:
             token_purchase_modal(username)
-        if st.session_state["page"] == "home":
+        if st.session_state["page"] == "home" and st.session_state["mustdefendcomplaint"] == False:
             homepage(username, userID)
         elif st.session_state["page"] == "blacklist":
             submit_blacklist_request(st.session_state["username"])
