@@ -568,8 +568,8 @@ def homepage(username, userID):
                 st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
                 return
             else:
-            token_add_minus(username, -blacklist_token_cost)
-            st.session_state["deducted_blacklist_tokens"] = True
+                token_add_minus(username, -blacklist_token_cost)
+                st.session_state["deducted_blacklist_tokens"] = True
 
         # self correction option
         if correction_mode == "Self-Correction":
