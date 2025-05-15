@@ -720,7 +720,11 @@ def homepage(username, userID):
 
 
             # Reject LLM correction 
-            if username is not None and st.session_state["corrected_text"] != st.session_state["original_text"]:
+            if (
+                st.session_state.get("paid_users")
+                and username is not None
+                and st.session_state["corrected_text"] != st.session_state["original_text"]
+            ):                
                 st.subheader("Reject Correction (Optional)")
                 rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
                 if st.button("Submit Rejection"):
