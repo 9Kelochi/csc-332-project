@@ -12,6 +12,7 @@ from streamlit_extras.stylable_container import stylable_container
 # --------------------- Session State & Navigation --------------------- #
 def init_session_state():
     defaults = {
+        "submitted": None,
         "self_edit": False,
         "paid_users": False,
         "username": None,
@@ -672,7 +673,6 @@ def homepage(username, userID):
                     token_add_minus(username, -correction_cost)
                     st.success(f"Accepted correction. Charged {correction_cost} tokens.")
                     del st.session_state["llm_diff_count"]
-                    st.session_state["submitted"] = None
                     st.session_state["response_holder"] = None
                     st.session_state["Acceppt_all"] = True
                     st.session_state["deducted_submit_tokens"] = False
