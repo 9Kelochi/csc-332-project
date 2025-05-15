@@ -1178,61 +1178,60 @@ def complainee(username):
 def filecomplaint(userID):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
-    
+
     cursor.execute("""
-        SELECT file_collaborations.collaborator_id, users.username 
-        FROM file_collaborations 
-        INNER JOIN users ON file_collaborations.collaborator_id = users.ID 
-        WHERE file_collaborations.owner_id = (
-            SELECT ID FROM users WHERE ID = ?
-        )
+        SELECT fc.collaborator_id, u.username
+        FROM file_collaborations fc
+        JOIN users u ON fc.collaborator_id = u.ID
+        WHERE fc.owner_id = ?
     """, (userID,))
-    
-    collaborators = cursor.fetchall()
+    collaborators_as_owner = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT fc.owner_id, u.username
+        FROM file_collaborations fc
+        JOIN users u ON fc.owner_id = u.ID
+        WHERE fc.collaborator_id = ?
+    """, (userID,))
+    collaborators_as_collaborator = cursor.fetchall()
+
+    all_partners = {name: uid for uid, name in collaborators_as_owner + collaborators_as_collaborator}
+
     conn.close()
 
-    if collaborators:
+    if all_partners:
         st.subheader("File a complaint against a collaborator:")
-        collaborator_options = {name: cid for cid, name in collaborators}
         with stylable_container(
             key="collaborator_input_container",
             css_styles="""
-                /* When typing */
                 div[role="combobox"] input {
                     color: black !important;
                 }
-
-                /* When not typing: visible selected text like "Lun" */
                 div[data-baseweb="select"] div[value] {
                     color: black !important;
                 }
-
-                /* Optional: label styling */
                 label {
                     color: black !important;
                     font-weight: bold;
                 }
-                 /* Dropdown option items (like 'Lun') */
                 ul[data-testid="stSelectboxVirtualDropdown"] li[role="option"] div {
                     color: black !important;
                 }
-
             """
         ):
-            selected_username = st.selectbox("Choose collaborator:", list(collaborator_options.keys()))
-        selected_id = collaborator_options[selected_username]
+            selected_username = st.selectbox("Choose collaborator:", list(all_partners.keys()))
+        selected_id = all_partners[selected_username]
 
         prompt = st.text_area("Enter your reasoning:", height=150)
 
         if st.button("Submit") and prompt:
             complaint_id = generate_random_id()
-            
+
             conn = sqlite3.connect('users.db')
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO complaints VALUES (?, ?, ?, ?, NULL, NULL, 0, NULL, NULL, 0)
             """, (complaint_id, userID, selected_id, prompt))
-            
             conn.commit()
             conn.close()
             st.success("Complaint submitted successfully.")
