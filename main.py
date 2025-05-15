@@ -303,6 +303,60 @@ def homepage(username):
         st.rerun()
 
     correction_mode = st.radio("Choose correction mode:", ["LLM Correction", "Self-Correction"], horizontal=True)
+
+    # the below deals with LLM correction option
+    # available models
+    available_models = ["mistral", "llama2", "gemma"]
+
+    # default model is set in session state
+    if "selected_model" not in st.session_state:
+        st.session_state["selected_model"] = "mistral"
+
+    if st.session_state.get("paid_users"):
+        try:
+            default_index = available_models.index(st.session_state["selected_model"])
+        except ValueError:
+            default_index = 0  # fallback to first model if invalid
+        
+
+        llm_model = st.selectbox(
+            "Choose a language model:",
+            available_models,
+            index=default_index
+        )
+        st.markdown("""
+            <style>
+            /* Make selected option text black */
+            div[data-baseweb="select"] div[value] {
+                color: black !important;
+            }
+            div[class*="st-emotion-cache-qiev7j"] {
+                color: black !important;
+            }
+            div[data-baseweb="option"] {
+                color: black !important;
+                background-color: white !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+
+
+
+        if llm_model != st.session_state["selected_model"]:
+            if st.button("Select Model"):
+                if st.session_state["tokens"] >= 5:
+                    st.session_state["tokens"] -= 5
+                    st.session_state["selected_model"] = llm_model
+                    st.info(f"Switched LLM to {llm_model}. Charged 5 tokens.")
+                    st.rerun()  # Refresh with updated model
+                else:
+                    st.error("Not enough tokens to switch models.")
+                    return
+    else:
+        llm_model = "mistral"
+        st.info("Free accounts use the default LLM: mistral.")
+        
     prompt = st.text_area("Enter text to correct:", height=300)
 
     upload_file = st.file_uploader("Upload a file", type="txt")
@@ -393,58 +447,6 @@ def homepage(username):
             st.info("Self-correction complete.")
             return
 
-        # the below deals with LLM correction option
-        # available models
-        available_models = ["mistral", "llama2", "gemma"]
-
-        # default model is set in session state
-        if "selected_model" not in st.session_state:
-            st.session_state["selected_model"] = "mistral"
-
-        if st.session_state.get("paid_users"):
-            try:
-                default_index = available_models.index(st.session_state["selected_model"])
-            except ValueError:
-                default_index = 0  # fallback to first model if invalid
-            
-
-            llm_model = st.selectbox(
-                "Choose a language model:",
-                available_models,
-                index=default_index
-            )
-            st.markdown("""
-                <style>
-                /* Make selected option text black */
-                div[data-baseweb="select"] div[value] {
-                    color: black !important;
-                }
-                div[class*="st-emotion-cache-qiev7j"] {
-                    color: black !important;
-                }
-                div[data-baseweb="option"] {
-                    color: black !important;
-                    background-color: white !important;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-
-
-
-
-            if llm_model != st.session_state["selected_model"]:
-                if st.button("Select Model"):
-                    if st.session_state["tokens"] >= 5:
-                        st.session_state["tokens"] -= 5
-                        st.session_state["selected_model"] = llm_model
-                        st.info(f"Switched LLM to {llm_model}. Charged 5 tokens.")
-                        st.rerun()  # Refresh with updated model
-                    else:
-                        st.error("Not enough tokens to switch models.")
-                        return
-        else:
-            llm_model = "mistral"
-            st.info("Free accounts use the default LLM: mistral.")
         
         # LLM correction
         instruction = (
@@ -456,6 +458,9 @@ def homepage(username):
             f"Words to NOT correct: {formatted_dict_words} \n\n"
             f"{cleaned_prompt}"
         )
+
+        llm_model = st.session_state["selected_model"] if st.session_state.get("paid_users") else "mistral"
+
         with st.spinner("🧠 LLM is thinking..."):
             response = ollama.generate(model=llm_model, prompt=instruction)
             response = response.get("response", "[No 'response' field found]")
