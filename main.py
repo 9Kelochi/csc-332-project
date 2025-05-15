@@ -414,6 +414,9 @@ def homepage(username, userID):
         
     # On Submit
     if st.button("Submit") and prompt:
+        st.session_state["submitted"] = True
+
+    if st.session_state.get("submitted") == True:
         word_count = len(words)
         user_tokens = st.session_state["tokens"]
 
@@ -507,6 +510,7 @@ def homepage(username, userID):
         with st.spinner("🧠 LLM is thinking..."):
             response = ollama.generate(model=llm_model, prompt=instruction)
             response = response.get("response", "[No 'response' field found]")
+            st.session_state["response_holder"] = response
 
         no_diff = word_difference(cleaned_prompt, response, username)
 
@@ -546,6 +550,8 @@ def homepage(username, userID):
                     token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
                     st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
                     del st.session_state["llm_diff_count"]
+                    st.session_state["submitted"] = None
+                    st.session_state["response_holder"] = None
                     st.rerun()  
 
             
@@ -565,7 +571,7 @@ def homepage(username, userID):
                         }
                     """
                 ):
-                    File_name = st.text_input("Input a file name:", key=f"file_input_key {generate_random_id()}")
+                    File_name = st.text_input("Input a file name:", key=f"file_input_key")
                 if st.button("Save File") and File_name:
                     save_id = generate_random_id()
                     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -573,10 +579,13 @@ def homepage(username, userID):
                     cursor = conn.cursor()
                     cursor.execute(
                         "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
-                        (save_id, userID, File_name, st.session_state["original_text"], now, username,))
+                        (save_id, userID, File_name, st.session_state["response_holder"], now, username,))
                     conn.commit()
                     conn.close()
+                    st.session_state["submitted"] = None
+                    st.session_state["response_holder"] = None
                     st.success("Save complete")
+                    st.rerun()
 
 
             # Reject LLM correction 
@@ -609,6 +618,8 @@ def homepage(username, userID):
                         del st.session_state["llm_diff_count"]
                     st.success("Your rejection has been submitted for review.")
                     time.sleep(1.5)
+                    st.session_state["submitted"] = None
+                    st.session_state["response_holder"] = None
                     st.rerun()
                                     
 
