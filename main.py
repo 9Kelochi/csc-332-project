@@ -1212,7 +1212,24 @@ def token_purchase_modal(username):
         st.session_state["pay_clicked"] = True
         with st.sidebar:
             st.markdown("<h1 style='color: green;'>100 Tokens = $1.00</h1>", unsafe_allow_html=True)
-            amount_t = st.text_input("Pay: ", value="0", key="pay_amount")
+            with stylable_container(
+                key="pay_input_box",
+                css_styles="""
+                    [data-baseweb="base-input"] input {
+                        color: black !important;
+                        background-color: white !important;
+                        border: 1px solid #ccc !important;
+                        border-radius: 6px !important;
+                        padding: 0.4rem !important;
+                    }
+
+                    label {
+                        color: black !important;
+                        font-weight: bold;
+                    }
+                """
+            ):
+                amount_t = st.text_input("Pay: ", value="0", key="pay_amount")
 
             try:
                 tokens_purchased = float(amount_t)
@@ -1765,7 +1782,7 @@ def registry_approval(username):
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by = ? WHERE username = ?",
-        (1, approved_Date, 0, username, st.session_state["username"])
+        (1, approved_Date, 0, st.session_state["username"], username)
     )
     conn.commit()
     conn.close()
