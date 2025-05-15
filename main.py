@@ -748,7 +748,7 @@ def free_user():
  
 
 # --------------------- Paid User Section --------------------- #
-def collab(username):
+def collab(username, userID):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute("SELECT file_id FROM file_collaborations WHERE owner_id = ? OR collaborator_id = ?", (get_id(username), get_id(username)))
@@ -812,7 +812,7 @@ def collab(username):
                     else:
                         st.error("File not found.")
     
-    filecomplaint(username)
+    filecomplaint(userID)
 
 def invites(username):
     conn = sqlite3.connect("users.db")
@@ -943,7 +943,7 @@ def complainee(username):
                 st.success(f"Your response to complaint {rowid} has been submitted.")
                 st.rerun() 
                 
-def filecomplaint(username):
+def filecomplaint(userID):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     
@@ -952,9 +952,9 @@ def filecomplaint(username):
         FROM file_collaborations 
         INNER JOIN users ON file_collaborations.collaborator_id = users.ID 
         WHERE file_collaborations.owner_id = (
-            SELECT ID FROM users WHERE username = ?
+            SELECT ID FROM users WHERE ID = ?
         )
-    """, (username,))
+    """, (userID,))
     
     collaborators = cursor.fetchall()
     conn.close()
@@ -974,7 +974,7 @@ def filecomplaint(username):
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO complaints VALUES (?, ?, ?, ?, NULL, NULL, 0, NULL, NULL, 0)
-            """, (complaint_id, username, selected_id, prompt))
+            """, (complaint_id, userID, selected_id, prompt))
             
             conn.commit()
             conn.close()
@@ -1089,6 +1089,7 @@ def view_my_rejections(username):
 
 def paid_user():
     username = st.session_state["username"]
+    userID = st.session_state["userID"]
     complainee(username)
     if st.session_state.get("logout") == True:
         add_logout(username)
@@ -1113,7 +1114,7 @@ def paid_user():
         elif st.session_state["page"] == "invites":
             invites(username)
         elif st.session_state["page"] == "collab":
-            collab(username)
+            collab(username, userID)
         elif st.session_state["page"] == "background_color":
             background_selector(username)
         elif st.session_state["page"] == "my_rejections":
@@ -1266,13 +1267,19 @@ def complaints():
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", prompt, username, approved_Date, complaintID))
-                            # cursor.execute("SELECT ID, tokens FROM users WHERE ID = ?", submittedBy) 
-                            # cursor.execute("UPDATE users SET tokens = ? WHERE ID = ?", ())
+                            cursor.execute("SELECT tokens FROM users WHERE ID = ?", (complainAbout,))
+                            result = cursor.fetchone()
+                            if result:
+                                tokens = result[0]
+                                token = int(tokens)
+                                if token != 0:
+                                    token = token - prompt
+                                    cursor.execute("UPDATE users SET tokens = ? WHERE ID = ?", (token, complainAbout))
+                                else: 
+                                    cursor.execute("UPDATE users SET account_approval = 0 WHERE ID = ?", (complainAbout,))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
-                            # ADDITIONAL ACTIONS: 
-                            ## take away tokens from the punished user 
 
                     with col6:
                         if st.button("Complainer",  key=f"punish_{submittedBy}--for: {complaintID}"): # punish the person who filed the complained 
@@ -1280,11 +1287,19 @@ def complaints():
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINER punished", prompt, username, approved_Date, complaintID))
+                            cursor.execute("SELECT tokens FROM users WHERE ID = ?", (submittedBy,))
+                            result = cursor.fetchone()
+                            if result:
+                                tokens = result[0]
+                                token = int(tokens)
+                                if token != 0:
+                                    token = token - prompt
+                                    cursor.execute("UPDATE users SET tokens = ? WHERE ID = ?", (token, submittedBy))
+                                else: 
+                                    cursor.execute("UPDATE users SET account_approval = 0 WHERE ID = ?", (submittedBy,))
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {submittedBy}")
-                            # ADDITIONAL ACTIONS: 
-                            ## take away tokens from the punished user 
         else:
             st.info("No Pending Complaints.")
 
