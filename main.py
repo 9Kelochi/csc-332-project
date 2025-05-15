@@ -12,6 +12,7 @@ from streamlit_extras.stylable_container import stylable_container
 # --------------------- Session State & Navigation --------------------- #
 def init_session_state():
     defaults = {
+        "tokenslayed": False,
         "mustdefendcomplaint": True,
         "submitted": None,
         "self_edit": False,
@@ -557,11 +558,13 @@ def homepage(username, userID):
         if not st.session_state.get("deducted_submit_tokens", False) and paiduser == 1:
             if user_tokens < word_count:
                 penalty = user_tokens // 2
-                token_add_minus(username, -penalty)
+                if st.session_state["tokenslayed"] == False: 
+                    token_add_minus(username, -penalty)
                 st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
                 return
             else:
-                token_add_minus(username, -word_count)
+                if st.session_state["tokenslayed"] == False: 
+                    token_add_minus(username, -word_count)
                 st.session_state["deducted_submit_tokens"] = True
 
         # Deduct tokens for blacklist words once
@@ -570,7 +573,8 @@ def homepage(username, userID):
                 st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
                 return
             else:
-                token_add_minus(username, -blacklist_token_cost)
+                if st.session_state["tokenslayed"] == False: 
+                    token_add_minus(username, -blacklist_token_cost)
                 st.session_state["deducted_blacklist_tokens"] = True
 
         # self correction option
@@ -579,7 +583,8 @@ def homepage(username, userID):
             if st.session_state["tokens"] < token_cost and paiduser == 1:
                 st.error(f"Not enough tokens for self-correction (need {token_cost}).")
                 return
-            token_add_minus(username, -token_cost)
+            if st.session_state["tokenslayed"] == False: 
+                token_add_minus(username, -token_cost)
 
             # Use LLM to identify incorrect words, but do not auto-correct
             instruction = (
@@ -638,7 +643,8 @@ def homepage(username, userID):
         no_diff = word_difference(cleaned_prompt, response, username)
 
         if no_diff and len(cleaned_prompt.split()) > 10:
-            token_add_minus(username, 3)
+            if st.session_state["tokenslayed"] == False: 
+                token_add_minus(username, 3)
             st.success("No errors found in your text! You've earned +3 tokens.")
 
         # show highlighted output
@@ -678,12 +684,14 @@ def homepage(username, userID):
                     st.session_state["Acceppt_all"] = True
                     st.session_state["deducted_submit_tokens"] = False
                     st.session_state["deducted_blacklist_tokens"] = False
+                    st.session_state["tokenslayed"] = True 
                     time.sleep(3)
                     st.rerun()
                     
             
             # save file if user is logged in
             if username is not None and st.session_state["Acceppt_all"]:
+                st.session_state["tokenslayed"] = True 
                 with stylable_container(
                     key="custom_input_container",
                     css_styles="""
@@ -729,6 +737,7 @@ def homepage(username, userID):
                 st.subheader("Reject Correction (Optional)")
                 rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
                 if st.button("Submit Rejection"):
+                    st.session_state["tokenslayed"] = True 
                     rejection_id = generate_random_id()
                     conn = sqlite3.connect("users.db")
                     cursor = conn.cursor()
