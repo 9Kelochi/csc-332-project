@@ -135,7 +135,7 @@ def navbar():
         # NO user navbar 
         if st.session_state['page'] == None:
             st.markdown("""
-                <div style="background-color: #ffefc6; padding: 15px; border-radius: 10px; font-size: 30px;">
+                <div style="background-color: #ffefc6; padding: 15px; border-radius: 10px; font-size: 30px; color: black;">
                     ⚠️ You are not currently logged in. Choose one of the options above.
                 </div>
             """, unsafe_allow_html=True)
@@ -891,6 +891,9 @@ def invitation(username):
             st.error("File not found or not owned by you.")
 
 def complainee(username): 
+    if 'responded_complaints' not in st.session_state:
+        st.session_state.responded_complaints = set()
+
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     
@@ -911,23 +914,28 @@ def complainee(username):
         st.header("A complaint has been filed against you:")
         
         for rowid, user, reason in result:
-            st.info(f"Complaint: {reason}")
+            if rowid in st.session_state.responded_complaints:
+                continue
 
+            st.info(f"Complaint: {reason}")
             response_key = f"response_{rowid}"
             response = st.text_area(f"Enter your defense {user} (response):", height=250, key=response_key)
 
-            if st.button(f"Submit response to complaint {rowid}"):
+            if st.button(f"Submit response to complaint {rowid}", key=f"submit_{rowid}"):
                 conn = sqlite3.connect('users.db')
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE complaints 
                     SET defenseByComplainee = ? 
-                    WHERE rowid = ?
+                    WHERE complaintID = ?
                 """, (response, rowid))
                 conn.commit()
                 conn.close()
+                
+                st.session_state.responded_complaints.add(rowid) 
                 st.success(f"Your response to complaint {rowid} has been submitted.")
-
+                st.rerun() 
+                
 def filecomplaint(username):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
@@ -950,7 +958,7 @@ def filecomplaint(username):
         selected_username = st.selectbox("Choose collaborator:", list(collaborator_options.keys()))
         selected_id = collaborator_options[selected_username]
 
-        prompt = st.text_area("Enter your reasoning:", height=300)
+        prompt = st.text_area("Enter your reasoning:", height=150)
 
         if st.button("Submit") and prompt:
             complaint_id = generate_random_id()
@@ -1269,7 +1277,7 @@ def complaints():
     elif complaints_log_mode == "Resolved":
         ###################################################################################
         # if view resolved 
-        conn = sqlite3.connect("token_terminator.db") #("users.db")
+        conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
         cursor.execute("SELECT complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status FROM complaints WHERE status = ?", [1]) # view unresolved complaints 
         # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
