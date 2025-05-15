@@ -83,9 +83,7 @@ def navbar():
         with cols[4]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
-
-        
-                
+               
     elif st.session_state.get("super_users"):
         cols = st.columns(4)
         with cols[0]:
@@ -1144,6 +1142,29 @@ def view_my_rejections(username):
     else:
         st.info("You haven't submitted any LLM rejection yet.")
 
+def saved_files(userID):
+    st.header("SAVED FILES:")
+
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT file_id, owner_id, file_name, data, created_at, owner_name FROM files WHERE owner_id = ?", [userID]) 
+    results = cursor.fetchall()
+    conn.close()
+    
+    if results:
+        for row in results:
+            file_id, owner_id, file_name, data, created_at, owner_name = row 
+            col1, col2 = st.columns([1, 2])
+            with col1: 
+                st.subheader(file_name)
+
+            with col2:
+                st.subheader(created_at)
+
+            with st.expander(f"File: {file_name} | saved on: {created_at} | saved by {owner_name}"): 
+                st.info(data)
+    else:
+        st.info("You have not saved any files.")
 
 
 def paid_user():
@@ -1174,6 +1195,8 @@ def paid_user():
             invites(username)
         elif st.session_state["page"] == "collab":
             collab(username, userID)
+        elif st.session_state["page"] == "files_saved":
+            saved_files(userID)
         elif st.session_state["page"] == "background_color":
             background_selector(username)
         elif st.session_state["page"] == "my_rejections":
