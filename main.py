@@ -323,13 +323,13 @@ def user_dictionary(username):
     conn.close()
 
     if words:
-        st.markdown("#### Your Words:")
-        with st.container():
-            for word in words:
+        with st.expander("📚 View Your Dictionary"):
+            st.markdown("#### Your Words:")
+            for i, word in enumerate(words):
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     with stylable_container(
-                        key=f"black_{word},
+                        key=f"black_{i}",  # safer than f"black_{word}" in case of duplicates
                         css_styles="""
                             div[data-testid="stMarkdownContainer"] div {
                                 background-color: white !important;
@@ -340,9 +340,12 @@ def user_dictionary(username):
                             }
                         """
                     ):
-                        st.markdown(f"<div style='background-color:#f0f0f0; padding:10px; border-radius:8px; color:black !important;'>{word}</div>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"<div style='background-color:#f0f0f0; padding:10px; border-radius:8px; color:black !important;'>{word}</div>",
+                            unsafe_allow_html=True
+                        )
                 with col2:
-                    if st.button("❌", key=f"delete_{word}"):
+                    if st.button("❌", key=f"delete_{i}"):  # safer than using word
                         conn = sqlite3.connect("users.db")
                         cursor = conn.cursor()
                         cursor.execute("DELETE FROM user_dictionary WHERE owner = ? AND word = ?", (username, word))
@@ -350,6 +353,7 @@ def user_dictionary(username):
                         conn.close()
                         st.success(f"Deleted '{word}' from your dictionary.")
                         st.rerun()
+    
     else:
         st.info("Your dictionary is currently empty.")
 
