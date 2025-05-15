@@ -1228,8 +1228,7 @@ def complaints():
     if complaints_log_mode == "Pending":
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
-        cursor.execute("SELECT complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status FROM complaints WHERE status = ?", [0]) # view unresolved complaints 
-        # db should also have a "reason for complaint" and a time of complaint, ie. [ reasoning | time_of ]
+        cursor.execute("SELECT complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status FROM complaints WHERE status = ?", [0]) 
         results = cursor.fetchall()
         conn.close()
 
@@ -1241,7 +1240,7 @@ def complaints():
                     col1, col2, col3, col4, col5, col6 = st.columns(6) 
                     with col1: 
                         ID = complaintID
-                        st.subheader(ID)
+                        st.text(ID)
 
                     with col2: 
                         explanation = reasonByComplainer
@@ -1261,6 +1260,8 @@ def complaints():
                             conn = sqlite3.connect("users.db")
                             cursor = conn.cursor()
                             cursor.execute("UPDATE complaints SET status = ?, decision = ?, tokenChange = ?, reviewedBy = ?, resolvedAt = ? WHERE complaintID = ?", (1, "COMPLAINEE punished", prompt, username, now, complaintID))
+                            # cursor.execute("SELECT ID, tokens FROM users WHERE ID = ?", submittedBy) 
+                            # cursor.execute("UPDATE users SET tokens = ? WHERE ID = ?", ())
                             conn.commit()
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
@@ -1298,7 +1299,7 @@ def complaints():
                     col1, col2, col3, col4 = st.columns(4) 
                     with col1: 
                         ID = complaintID
-                        st.subheader(ID)
+                        st.text(ID)
 
                     with col2: 
                         explanation = reasonByComplainer
@@ -1491,12 +1492,12 @@ def super_user():
 
 # FUNCTIONS 
 def registry_approval(username):
-    approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now()
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE users SET account_approval = ?, approved_Date = ?, tokens = ?, approved_by = ? WHERE username = ?",
-        (1, approved_Date, 0, username, st.session_state["username"])
+        (1, now, 0, username, st.session_state["username"])
     )
     conn.commit()
     conn.close()
