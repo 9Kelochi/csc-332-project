@@ -44,7 +44,7 @@ def navbar():
     
     if st.session_state.get("paid_users"):
         # Paid User Navbar
-        cols = st.columns(10)
+        cols = st.columns(5)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
@@ -65,28 +65,29 @@ def navbar():
             if st.button("🤝 Collab", key="nav_collab_paid"):
                 st.session_state["page"] = "collab"
                 st.rerun()
-        with cols[5]:
+        cols = st.columns(5)
+        with cols[0]:
             if st.button("📂 Files Saved", key="nav_files_paid"):
                 st.session_state["page"] = "files_saved"
-        with cols[6]:
+        with cols[1]:
             if st.button("💰 Buy Tokens", key="nav_tokens_paid"):
                 st.session_state["buy"] = True
                 st.rerun()
-        with cols[7]:
+        with cols[2]:
             if st.button("🌈 Background", key="nav_background_color"):
                 st.session_state["page"] = "background_color" 
-        with cols[8]:
+        with cols[3]:
             if st.button("📬 My Rejections", key="nav_my_rejections"):
                 st.session_state["page"] = "my_rejections"
                 st.rerun()
-        with cols[9]:
+        with cols[4]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
 
         
                 
     elif st.session_state.get("super_users"):
-        cols = st.columns(7)
+        cols = st.columns(4)
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_super"): 
                 st.session_state["page"] = "home"
@@ -103,15 +104,16 @@ def navbar():
             if st.button("Complaints", key="nav_complaint_super"): 
                 st.session_state["page"] = "complaints"
                 st.rerun() 
-        with cols[4]:
+        cols = st.columns(3)
+        with cols[0]:
             if st.button("Blacklist", key="nav_Blacklist_super"): 
                 st.session_state["page"] = "blacklist"
                 st.rerun()
-        with cols[5]:
+        with cols[1]:
             if st.button("Rejections", key="nav_rejection_super"):
                 st.session_state["page"] = "rejections"
                 st.rerun() 
-        with cols[6]:
+        with cols[2]:
             if st.button("🚪 Logout", key="nav_logout_super"):
                 st.session_state["logout"] = True
 
@@ -1280,24 +1282,20 @@ def complaints():
             for row in results:
                 complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, status = row # add [ reason, time_of ] columns 
                 with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                    col1, col2, col3, col4, col5, col6 = st.columns(6) 
+                    ID = complaintID
+                    st.subheader(ID)
+                    prompt = st.number_input("tokens", min_value=1, max_value=50, key = f"token amount for: {complaintID}")
+                    col1, col2 = st.columns(2) 
                     with col1: 
-                        ID = complaintID
-                        st.text(ID)
-
-                    with col2: 
                         explanation = reasonByComplainer
                         st.info(explanation)
 
-                    with col3: 
+                    with col2: 
                         defense = defenseByComplainee
                         st.info(defense)
-
-                    with col4:
-                        prompt = st.number_input("tokens", min_value=1, max_value=50, key = f"token amount for: {complaintID}")
-
                     
-                    with col5:
+                    col1, col2 = st.columns(2) 
+                    with col2:
                         if st.button("Complainee", key=f"punish_{complainAbout}--for: {complaintID}"): # punish the person that the complain was filed against 
                             approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
                             conn = sqlite3.connect("users.db")
@@ -1317,7 +1315,7 @@ def complaints():
                             conn.close()
                             st.success(f"Complaint {complaintID} resolved, action taken against {complainAbout}")
 
-                    with col6:
+                    with col1:
                         if st.button("Complainer",  key=f"punish_{submittedBy}--for: {complaintID}"): # punish the person who filed the complained 
                             approved_Date = datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
                             conn = sqlite3.connect("users.db")
@@ -1354,20 +1352,18 @@ def complaints():
             for row in results:
                 complaintID, submittedBy, complainAbout, reasonByComplainer, defenseByComplainee, tokenChange, decision, status = row # add [ reason, time_of ] columns 
                 with st.expander(f"Submitted by {submittedBy} | Complaint for {complainAbout} | Status: {status}"): #  | Complain filed at: {complain time} | reason: {reason}"): 
-                    col1, col2, col3, col4 = st.columns(4) 
+                    ID = complaintID
+                    st.subheader(ID)
+                    col1, col2, col3 = st.columns(3) 
                     with col1: 
-                        ID = complaintID
-                        st.text(ID)
-
-                    with col2: 
                         explanation = reasonByComplainer
                         st.info(f"COMPLAINER: {explanation}")
 
-                    with col3: 
+                    with col2: 
                         defense = defenseByComplainee
                         st.info(f"COMPLAINEE: {defense}")
 
-                    with col4:
+                    with col3:
                         st.info(f"{decision} for {tokenChange} tokens")
         else:
             st.info("No Resolved Complaints.")
