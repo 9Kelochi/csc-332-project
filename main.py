@@ -1439,12 +1439,16 @@ def super_home():
     cursor3 = conn.cursor()
     cursor3.execute("SELECT COUNT(applicationID) FROM pending_users WHERE status = 0")
     apacc_count = cursor3.fetchall()
+    cursor4 = conn.cursor()
+    cursor4.execute("SELECT COUNT(*) FROM llm_rejections WHERE status = 'pending'")
+    llmrej_count = cursor4.fetchall()
     conn.close()
 
     
     st.text(f"Pending users to review: {apacc_count[0][0]}")
     st.text(f"Pending complaints to review: {pcomp_count[0][0]}")
     st.text(f"Pending Blacklist words to review: {pbkls_count[0][0]}")
+    st.text(f"Pending LLM Rejections to review: {llmrej_count[0][0]}")
     #### fetch counts of pending actions: 
     # - count: pending complaints to review! 
     # - count: pending accounts to approve! 
