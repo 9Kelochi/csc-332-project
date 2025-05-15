@@ -573,11 +573,15 @@ def homepage(username, userID):
                 if st.button("Save File") and File_name:
                     save_id = generate_random_id()
                     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.session_state["tokens"] -= 5
                     conn = sqlite3.connect('users.db')
                     cursor = conn.cursor()
                     cursor.execute(
                         "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
                         (save_id, userID, File_name, st.session_state["response_holder"], now, username,))
+                    cursor.execute(
+                        "update users set tokens = ? where ID = ?", (st.session_state["tokens"], userID,)
+                    )
                     conn.commit()
                     conn.close()
                     st.session_state["submitted"] = None
@@ -607,6 +611,10 @@ def homepage(username, userID):
                         rejection_reason
                     ))
 
+                    cursor.execute(
+                        "update users set tokens = ? where ID = ?", (st.session_state["tokens"], userID,)
+                    )
+                    
                     conn.commit()
                     conn.close()
 
