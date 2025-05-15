@@ -84,6 +84,10 @@ def navbar():
         with cols[4]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
+        cols = st.columns(1)
+        with cols[0]:
+            if st.button("📚 Dictionary"):
+                st.session_state["page"] = "Dictionary"
                
     elif st.session_state.get("super_users"):
         cols = st.columns(4)
@@ -307,6 +311,92 @@ def trigger_lockout(now):
     st.rerun()
 
 # --------------------- Homepage Section --------------------- #
+
+def user_dictionary(username):
+    st.header("User Dictionary:")
+
+    # Fetch and display existing words
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT word FROM user_dictionary WHERE owner = ?", (username,))
+    words = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    if words:
+        st.markdown("#### Your Words:")
+        with st.container():
+            for word in words:
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    with stylable_container(
+                        key="custom_black_text_box",
+                        css_styles="""
+                            div[data-testid="stMarkdownContainer"] div {
+                                background-color: white !important;
+                                padding: 10px !important;
+                                border-radius: 8px !important;
+                                color: black !important;
+                                font-weight: normal;
+                            }
+                        """
+                    ):
+                        st.markdown(f"<div style='background-color:#f0f0f0; padding:10px; border-radius:8px; color:black !important;'>{word}</div>", unsafe_allow_html=True)
+                with col2:
+                    if st.button("❌", key=f"delete_{word}"):
+                        conn = sqlite3.connect("users.db")
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM user_dictionary WHERE owner = ? AND word = ?", (username, word))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"Deleted '{word}' from your dictionary.")
+                        st.rerun()
+    else:
+        st.info("Your dictionary is currently empty.")
+
+    # Add word section (FIXED INDENTATION)
+    st.subheader("➕ Add New Word")
+    with stylable_container(
+        key="custom_input_style",
+        css_styles="""
+            /* Make the input text black */
+            [data-baseweb="base-input"] input {
+                color: black !important;
+                background-color: white !important;
+                border: 1px solid #ccc !important;
+                border-radius: 6px !important;
+                padding: 0.4rem !important;
+            }
+
+            /* Style the label */
+            label {
+                color: black !important;
+                font-weight: bold;
+            }
+        """
+    ):
+        st.text_input("Enter your word:", key="new_dict_word_input")
+
+    new_word = st.session_state.get("new_dict_word_input", "")
+
+    if st.button("Upload", key="upload_word_button"):
+        if not new_word.strip():
+            st.warning("Please enter a valid word.")
+        else:
+            word_to_add = new_word.strip()
+            conn = sqlite3.connect("users.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT word FROM user_dictionary WHERE owner = ? AND word = ?", (username, word_to_add))
+            exists = cursor.fetchone()
+            if exists:
+                st.warning("Word already exists in your dictionary.")
+            else:
+                cursor.execute("INSERT INTO user_dictionary (owner, word) VALUES (?, ?)", (username, word_to_add))
+                conn.commit()
+                st.success(f"'{word_to_add}' has been added.")
+                time.sleep(1)
+                st.rerun()
+            conn.close()
+            
 def homepage(username, userID):
     st.title("The Token Terminator")
     now = datetime.now()
@@ -1274,6 +1364,8 @@ def paid_user():
             background_selector(username)
         elif st.session_state["page"] == "my_rejections":
             view_my_rejections(username)
+        elif st.session_state["page"] == "Dictionary":
+            user_dictionary(username)
 
 
 # --------------------- Super User Section --------------------- #
