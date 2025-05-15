@@ -526,7 +526,11 @@ def homepage(username, userID):
     # On Submit
     if st.button("Submit") and prompt:
         st.session_state["submitted"] = True
-
+        st.session_state["deducted_submit_tokens"] = False
+        st.session_state["deducted_blacklist_tokens"] = False
+        st.session_state["Acceppt_all"] = False
+        
+        
     if st.session_state.get("submitted") == True:
         word_count = len(words)
         user_tokens = st.session_state["tokens"]
@@ -547,21 +551,25 @@ def homepage(username, userID):
             trigger_lockout(now)
             return
 
-        # check for enough tokens for paid users
-        if user_tokens < word_count and paiduser == 1:
-            penalty = user_tokens // 2
-            st.session_state["tokens"] -= penalty
-            st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
-            return
-        else:
-            st.session_state["tokens"] -= word_count 
+         # Deduct tokens for submission once
+        if not st.session_state.get("deducted_submit_tokens", False) and paiduser == 1:
+            if user_tokens < word_count:
+                penalty = user_tokens // 2
+                token_add_minus(username, -penalty)
+                st.error(f"Not enough tokens. Penalty applied: -{penalty} tokens.")
+                return
+            else:
+                token_add_minus(username, -word_count)
+                st.session_state["deducted_submit_tokens"] = True
 
-        # check for enough tokens for blacklisted words for paid users
-        if st.session_state["tokens"] < blacklist_token_cost and paiduser == 1:
-            st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
-            return
-        else:
-            st.session_state["tokens"] -= blacklist_token_cost
+        # Deduct tokens for blacklist words once
+        if not st.session_state.get("deducted_blacklist_tokens", False) and paiduser == 1:
+            if st.session_state["tokens"] < blacklist_token_cost:
+                st.error(f"Not enough tokens to process blacklisted words. Required: {blacklist_token_cost}")
+                return
+            else:
+            token_add_minus(username, -blacklist_token_cost)
+            st.session_state["deducted_blacklist_tokens"] = True
 
         # self correction option
         if correction_mode == "Self-Correction":
@@ -569,7 +577,7 @@ def homepage(username, userID):
             if st.session_state["tokens"] < token_cost and paiduser == 1:
                 st.error(f"Not enough tokens for self-correction (need {token_cost}).")
                 return
-            st.session_state["tokens"] -= token_cost
+            token_add_minus(username, -token_cost)
 
             # Use LLM to identify incorrect words, but do not auto-correct
             instruction = (
@@ -660,12 +668,16 @@ def homepage(username, userID):
             if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
                 st.subheader("Accept LLM Correction?")
                 if st.button("Accept All Corrections"):
-                    token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
-                    st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
+                    correction_cost = int(st.session_state["llm_diff_count"]) * 5
+                    token_add_minus(username, -correction_cost)
+                    st.success(f"Accepted correction. Charged {correction_cost} tokens.")
                     del st.session_state["llm_diff_count"]
                     st.session_state["submitted"] = None
                     st.session_state["response_holder"] = None
                     st.session_state["Acceppt_all"] = True
+                    st.session_state["deducted_submit_tokens"] = False
+                    st.session_state["deducted_blacklist_tokens"] = False
+                    
             
             # save file if user is logged in
             if username is not None and st.session_state["Acceppt_all"]:
