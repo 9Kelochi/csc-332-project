@@ -942,6 +942,22 @@ def free_user():
  
 
 # --------------------- Paid User Section --------------------- #
+def sent_to_collab(invite_id):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT inviter_id, invitee_id, file_id FROM invitations WHERE invite_id = ?", (invite_id,))
+    row = cursor.fetchone()
+    
+    if row:
+        owner_id, collaborator_id, file_id = row  # Correct unpacking here
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO file_collaborations (owner_id, collaborator_id, file_id, status, created_at) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (owner_id, collaborator_id, file_id, "active", now))
+        conn.commit()
+    conn.close()
+    
 def collab(username, userID):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
@@ -1082,7 +1098,10 @@ def invitation(username):
             cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             inviter_row = cursor.fetchone()
             inviter_id = inviter_row[0] if inviter_row else None
-
+            
+            cursor.execute("SELECT id FROM users WHERE username = ?", (invite_user,))
+            invitee_row = cursor.fetchone()
+            invitee_id = invitee_row[0] if invitee_row else None
             if not inviter_id:
                 st.error("Inviter ID not found.")
                 conn.close()
@@ -1099,9 +1118,9 @@ def invitation(username):
                 # Insert the invitation
                 cursor.execute("""
                     INSERT INTO invitations 
-                    (invite_id, inviter_id, invitee, inviter, status, invite_at, file_name, file_id) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (invite_id, inviter_id, invite_user, username, "pending", now, file, file_id))
+                    (invite_id, inviter_id, invitee, inviter, status, invite_at, file_name, file_id, invitee_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (invite_id, inviter_id, invite_user, username, "pending", now, file, file_id, invitee_id))
 
                 conn.commit()
                 st.success(f"Invitation sent to {invite_user}.")
