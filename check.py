@@ -1,3 +1,4 @@
 import ollama
-#ollama.pull("gemma3")
-ollama.list()
+ollama.pull("gemma")
+ollama.pull("mistral")
+ollama.pull("llama3")
