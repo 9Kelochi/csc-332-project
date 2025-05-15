@@ -326,15 +326,15 @@ def homepage(username, userID):
         )
         st.markdown("""
             <style>
-            /* Make selected option text black */
+            /* Make selected option text white */
             div[data-baseweb="select"] div[value] {
-                color: black !important;
+                color: white !important;
             }
             div[class*="st-emotion-cache-qiev7j"] {
-                color: black !important;
+                color: white !important;
             }
             div[data-baseweb="option"] {
-                color: black !important;
+                color: white !important;
                 background-color: white !important;
             }
             </style>
@@ -614,7 +614,7 @@ def homepage(username, userID):
                     cursor.execute(
                         "update users set tokens = ? where ID = ?", (st.session_state["tokens"], userID,)
                     )
-                    
+
                     conn.commit()
                     conn.close()
 
