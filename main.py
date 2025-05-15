@@ -677,6 +677,8 @@ def homepage(username, userID):
                     st.session_state["Acceppt_all"] = True
                     st.session_state["deducted_submit_tokens"] = False
                     st.session_state["deducted_blacklist_tokens"] = False
+                    time.sleep(3)
+                    st.rerun()
                     
             
             # save file if user is logged in
