@@ -329,7 +329,7 @@ def user_dictionary(username):
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     with stylable_container(
-                        key="custom_black_text_box",
+                        key=f"black_{word},
                         css_styles="""
                             div[data-testid="stMarkdownContainer"] div {
                                 background-color: white !important;
