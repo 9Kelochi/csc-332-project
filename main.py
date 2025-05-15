@@ -31,6 +31,7 @@ def init_session_state():
         "ID": None,
         "buy": False,
         "background": None,
+        "Acceppt_all": False,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -199,7 +200,25 @@ def token_add_minus(username, token):
 
 def submit_blacklist_request(username):
     st.subheader("🛑 Submit a Word to be Blacklisted")
-    word_to_block = st.text_input("Enter a word you want added to the blacklist:")
+    with stylable_container(
+        key="blacklist_input_container",
+        css_styles="""
+            /* Target the input field inside base-input container */
+            [data-baseweb="base-input"] input {
+                color: black !important;
+                background-color: #f0f0f0 !important;
+                border: 2px solid #999 !important;
+                border-radius: 8px !important;
+            }
+
+            /* Optional: style the label */
+            label {
+                color: black !important;
+                font-weight: bold;
+            }
+        """
+    ):
+        word_to_block = st.text_input("Enter a word you want added to the blacklist:")
 
     if st.button("Submit Blacklist Request"):
         if not word_to_block.strip():
@@ -318,27 +337,27 @@ def homepage(username, userID):
         except ValueError:
             default_index = 0  # fallback to first model if invalid
         
-
-        llm_model = st.selectbox(
-            "Choose a language model:",
-            available_models,
-            index=default_index
-        )
-        st.markdown("""
-            <style>
-            /* Make selected option text white */
-            div[data-baseweb="select"] div[value] {
-                color: white !important;
-            }
-            div[class*="st-emotion-cache-qiev7j"] {
-                color: white !important;
-            }
-            div[data-baseweb="option"] {
-                color: white !important;
-                background-color: white !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
+        with stylable_container(
+            key="model_select_container",
+            css_styles="""
+                /* Typing field inside selectbox */
+                div[data-baseweb="select"] div[value] {
+                    color: black !important;
+                }
+                div[class*="st-emotion-cache-qiev7j"] {
+                    color: black !important;
+                }
+                div[data-baseweb="option"] {
+                    color: black !important;
+                    background-color: white !important;
+                }
+            """
+        ):
+            llm_model = st.selectbox(
+                "Choose a language model:",
+                available_models,
+                index=default_index
+            )
 
 
 
@@ -550,11 +569,10 @@ def homepage(username, userID):
                     del st.session_state["llm_diff_count"]
                     st.session_state["submitted"] = None
                     st.session_state["response_holder"] = None
-                    st.rerun()  
-
+                    st.session_state["Acceppt_all"] = True
             
             # save file if user is logged in
-            if username is not None:
+            if username is not None and st.session_state["Acceppt_all"]:
                 with stylable_container(
                     key="custom_input_container",
                     css_styles="""
@@ -587,6 +605,7 @@ def homepage(username, userID):
                     st.session_state["submitted"] = None
                     st.session_state["response_holder"] = None
                     st.success("Save complete")
+                    time.sleep(1.5)
                     st.rerun()
 
 
@@ -832,10 +851,10 @@ def collab(username, userID):
             
             with st.expander(f"File ID: {file_id}", expanded=st.session_state[edit_key]):
                 if not st.session_state[edit_key]:
-                    if st.button("Edit File", key=f"edit_{file_id}--{generate_random_id}"):
+                    rand_key = f"edit_{file_id}--{file_id}"  # deterministic and stable
+                    if st.button("Edit File", key=rand_key):
                         st.session_state[edit_key] = True
                         st.rerun()
-                
                 if st.session_state[edit_key]:
                     conn = sqlite3.connect("users.db")
                     cursor = conn.cursor()
@@ -876,7 +895,6 @@ def collab(username, userID):
                                 st.rerun()
                     else:
                         st.error("File not found.")
-    
     filecomplaint(userID)
 
 def invites(username):
@@ -917,8 +935,28 @@ def invites(username):
         st.info("No invitations received.")
 
 def invitation(username):
-    invite_user = st.text_input("Enter the username of the user you want to invite:")
-    file = st.text_input("Enter the file name:")
+    st.header("Invitation")
+    with stylable_container(
+        key="invite_input_container",
+        css_styles="""
+            /* Style the actual input text */
+            [data-baseweb="base-input"] input {
+                color: black !important;
+                background-color: #f8f8f8 !important;
+                border: 1px solid #999 !important;
+                border-radius: 6px !important;
+                padding: 0.4rem !important;
+            }
+
+            /* Style the label above the input */
+            label {
+                color: black !important;
+                font-weight: bold;
+            }
+        """
+    ):
+        invite_user = st.text_input("Enter the username of the user you want to invite:")
+        file = st.text_input("Enter the file name:")
     if st.button("Send Invitation"):
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
@@ -1027,7 +1065,32 @@ def filecomplaint(userID):
     if collaborators:
         st.subheader("File a complaint against a collaborator:")
         collaborator_options = {name: cid for cid, name in collaborators}
-        selected_username = st.selectbox("Choose collaborator:", list(collaborator_options.keys()))
+        with stylable_container(
+            key="collaborator_input_container",
+            css_styles="""
+                /* When typing */
+                div[role="combobox"] input {
+                    color: black !important;
+                }
+
+                /* When not typing: visible selected text like "Lun" */
+                div[data-baseweb="select"] div[value] {
+                    color: black !important;
+                }
+
+                /* Optional: label styling */
+                label {
+                    color: black !important;
+                    font-weight: bold;
+                }
+                 /* Dropdown option items (like 'Lun') */
+                ul[data-testid="stSelectboxVirtualDropdown"] li[role="option"] div {
+                    color: black !important;
+                }
+
+            """
+        ):
+            selected_username = st.selectbox("Choose collaborator:", list(collaborator_options.keys()))
         selected_id = collaborator_options[selected_username]
 
         prompt = st.text_area("Enter your reasoning:", height=150)
