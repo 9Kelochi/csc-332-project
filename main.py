@@ -1784,8 +1784,9 @@ def super_user():
     username = st.session_state["username"]
     st.sidebar.write(f"Welcome, {username}!")
 
-    st.title("Super User Page")
+    
     if st.session_state["page"] == 'home':
+        st.title("Super User Page")
         super_home()
     if st.session_state["page"] == 'approval':
         approval_page()
