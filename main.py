@@ -442,10 +442,41 @@ def homepage(username):
                 st.error(f"Not enough tokens for self-correction (need {token_cost}).")
                 return
             st.session_state["tokens"] -= token_cost
+
+            # Use LLM to identify incorrect words, but do not auto-correct
+            instruction = (
+                "You will receive a paragraph of text. Do not correct it. "
+                "Instead, identify only the words that are grammatically incorrect or have spelling mistakes. "
+                "Return a comma-separated list of only those words. No explanations, no corrections.\n\n"
+                f"{cleaned_prompt}"
+            )
+
+            llm_model = st.session_state.get("selected_model", "mistral")
+
+            with st.spinner("🔍 Checking for issues..."):
+                response = ollama.generate(model=llm_model, prompt=instruction)
+                response = response.get("response", "")
+            
+            # st.info(f"The model found these words to be incorrect: {response}")
+            incorrect_words = [w.strip().lower() for w in response.split(",") if w.strip()]
+            highlighted = []
+
+            for word in cleaned_prompt.split():
+                if word.lower().strip(".,!?") in incorrect_words:
+                    highlighted.append(f"<mark>{word}</mark>")
+                else:
+                    highlighted.append(word)
+
+            highlighted_text = " ".join(highlighted)
+
+            # Save both for consistency
             st.session_state["original_text"] = cleaned_prompt
-            st.session_state["corrected_text"] = cleaned_prompt
-            st.info("Self-correction complete.")
+            st.session_state["corrected_text"] = highlighted_text
+            st.info("Incorrect words have been highlighted. Please self-correct them below.")
+            st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
+
             return
+
 
         
         # LLM correction
@@ -471,104 +502,104 @@ def homepage(username):
             token_add_minus(username, 3)
             st.success("No errors found in your text! You've earned +3 tokens.")
 
-    # show highlighted output
-    if "corrected_text" in st.session_state:
-        st.markdown("""
-            <style>
-                .correction-box {
-                    background-color: #f9f9f9 !important;
-                    color: black !important;
-                    padding: 15px;
-                    border: 2px solid #ccc;
-                    border-radius: 10px;
-                    max-height: 300px;
-                    overflow-y: auto;
-                    font-size: 16px;
-                    line-height: 1.5;
-                }
-                .correction-box mark {
-                    background-color: yellow !important;
-                    color: black !important;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
-
-        
-        # accept corrections
-        if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
-            st.subheader("Accept LLM Correction?")
-            if st.button("Accept All Corrections"):
-                token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
-                st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
-                del st.session_state["llm_diff_count"]
-                st.rerun()
-
-         
-        # save file if user is logged in
-        if username is not None:
-            with stylable_container(
-                key="custom_input_container",
-                css_styles="""
-                    input[type="text"] {
+        # show highlighted output
+        if "corrected_text" in st.session_state:
+            st.markdown("""
+                <style>
+                    .correction-box {
+                        background-color: #f9f9f9 !important;
                         color: black !important;
-                        background-color: white !important;
-                        border: 1px solid #ccc !important;
+                        padding: 15px;
+                        border: 2px solid #ccc;
+                        border-radius: 10px;
+                        max-height: 300px;
+                        overflow-y: auto;
+                        font-size: 16px;
+                        line-height: 1.5;
                     }
-
-                    label {
+                    .correction-box mark {
+                        background-color: yellow !important;
                         color: black !important;
                     }
-                """
-            ):
-                File_name = st.text_input("Input a file name:", key="file_input_key")
-            if st.button("Save File") and File_name:
-                conn = sqlite3.connect('users.db')
-                cursor = conn.cursor()
-                save_id = generate_random_id()
-                cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
-                result = cursor.fetchone()
-                ID = result[0]
-                cursor.execute(
-                    "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
-                    (save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
-                conn.commit()
-                conn.close()
-                st.success("Save complete")
+                </style>
+            """, unsafe_allow_html=True)
 
-        # Reject LLM correction 
-        if username is not None and st.session_state["corrected_text"] != st.session_state["original_text"]:
-            st.subheader("Reject Correction (Optional)")
-            rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
-            if st.button("Submit Rejection"):
-                rejection_id = generate_random_id()
-                conn = sqlite3.connect("users.db")
-                cursor = conn.cursor()
+            st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
 
-                cursor.execute("""
-                    INSERT INTO llm_rejections (
-                        rejection_id, username, original_text, corrected_text, reason
-                    ) VALUES (?, ?, ?, ?, ?)
-                """, (
-                    rejection_id,
-                    username,
-                    st.session_state["original_text"],
-                    st.session_state["corrected_text"],
-                    rejection_reason
-                ))
-
-                conn.commit()
-                conn.close()
-
-
-                # clear diff count so it can't get applied accidentally later
-                if "llm_diff_count" in st.session_state:
+            
+            # accept corrections
+            if st.session_state.get("paid_users") and st.session_state.get("llm_diff_count", 0) > 0:
+                st.subheader("Accept LLM Correction?")
+                if st.button("Accept All Corrections"):
+                    token_add_minus(username, int(st.session_state["llm_diff_count"]) * -5)
+                    st.success(f"Accepted correction. Charged {int(st.session_state['llm_diff_count']) * 5} tokens.")
                     del st.session_state["llm_diff_count"]
-                st.success("Your rejection has been submitted for review.")
-                time.sleep(1.5)
-                st.rerun()
-                                
+                    st.rerun()
+
+            
+            # save file if user is logged in
+            if username is not None:
+                with stylable_container(
+                    key="custom_input_container",
+                    css_styles="""
+                        input[type="text"] {
+                            color: black !important;
+                            background-color: white !important;
+                            border: 1px solid #ccc !important;
+                        }
+
+                        label {
+                            color: black !important;
+                        }
+                    """
+                ):
+                    File_name = st.text_input("Input a file name:", key="file_input_key")
+                if st.button("Save File") and File_name:
+                    conn = sqlite3.connect('users.db')
+                    cursor = conn.cursor()
+                    save_id = generate_random_id()
+                    cursor.execute("SELECT ID FROM users WHERE username = ?", (username,))
+                    result = cursor.fetchone()
+                    ID = result[0]
+                    cursor.execute(
+                        "INSERT INTO files (file_id, owner_id, file_name, data, created_at, owner_name) VALUES (?, ?, ?, ?, ?, ?)",
+                        (save_id, ID, File_name, st.session_state["original_text"], datetime.now(), username,))
+                    conn.commit()
+                    conn.close()
+                    st.success("Save complete")
+
+            # Reject LLM correction 
+            if username is not None and st.session_state["corrected_text"] != st.session_state["original_text"]:
+                st.subheader("Reject Correction (Optional)")
+                rejection_reason = st.text_area("If you disagree with the LLM's correction, explain why:")
+                if st.button("Submit Rejection"):
+                    rejection_id = generate_random_id()
+                    conn = sqlite3.connect("users.db")
+                    cursor = conn.cursor()
+
+                    cursor.execute("""
+                        INSERT INTO llm_rejections (
+                            rejection_id, username, original_text, corrected_text, reason
+                        ) VALUES (?, ?, ?, ?, ?)
+                    """, (
+                        rejection_id,
+                        username,
+                        st.session_state["original_text"],
+                        st.session_state["corrected_text"],
+                        rejection_reason
+                    ))
+
+                    conn.commit()
+                    conn.close()
+
+
+                    # clear diff count so it can't get applied accidentally later
+                    if "llm_diff_count" in st.session_state:
+                        del st.session_state["llm_diff_count"]
+                    st.success("Your rejection has been submitted for review.")
+                    time.sleep(1.5)
+                    st.rerun()
+                                    
 
 
 
