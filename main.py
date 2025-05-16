@@ -670,6 +670,8 @@ def homepage(username, userID):
             """, unsafe_allow_html=True)
 
             st.markdown(f"<div class='correction-box'>{st.session_state['corrected_text']}</div>", unsafe_allow_html=True)
+            if st.session_state['paid_users']:
+                st.write(f"Word corrected: {int(st.session_state['llm_diff_count'])}")
 
             
             # accept corrections
