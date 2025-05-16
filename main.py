@@ -52,38 +52,41 @@ def navbar():
         with cols[0]:
             if st.button("🏠 Home", key="nav_home_paid"):
                 st.session_state["page"] = "home"
-                st.rerun()
+                st.session_state["submitted"] = False
         with cols[1]:  # adjust the column index as needed
             if st.button("🚫 Blacklist", key="nav_blacklist"):
                 st.session_state["page"] = "blacklist"
-                st.rerun()
+                st.session_state["submitted"] = False
         with cols[2]:
             if st.button("✉️ Invitation", key="nav_invitation_paid"):
                 st.session_state["page"] = "invitation"
-                st.rerun()
+                st.session_state["submitted"] = False
         with cols[3]:
             if st.button("📨 Invites", key="nav_invites_paid"):
                 st.session_state["page"] = "invites"
-                st.rerun()
+                st.session_state["submitted"] = False
         with cols[4]:
             if st.button("🤝 Collab", key="nav_collab_paid"):
                 st.session_state["page"] = "collab"
-                st.rerun()
+                st.session_state["submitted"] = False
         cols = st.columns(5)
         with cols[0]:
             if st.button("📂 Files Saved", key="nav_files_paid"):
                 st.session_state["page"] = "files_saved"
+                st.session_state["submitted"] = False
         with cols[1]:
             if st.button("💰 Buy Tokens", key="nav_tokens_paid"):
                 st.session_state["buy"] = True
-                st.rerun()
+                st.session_state["submitted"] = False
+
         with cols[2]:
             if st.button("🌈 Background", key="nav_background_color"):
                 st.session_state["page"] = "background_color" 
+                st.session_state["submitted"] = False
         with cols[3]:
             if st.button("📬 My Rejections", key="nav_my_rejections"):
                 st.session_state["page"] = "my_rejections"
-                st.rerun()
+                st.session_state["submitted"] = False
         with cols[4]:
             if st.button("🚪 Logout", key="nav_logout_paid"):
                 st.session_state["logout"] = True
@@ -91,6 +94,7 @@ def navbar():
         with cols[0]:
             if st.button("📚 Dictionary"):
                 st.session_state["page"] = "Dictionary"
+                st.session_state["submitted"] = False
                
     elif st.session_state.get("super_users"):
         cols = st.columns(4)
